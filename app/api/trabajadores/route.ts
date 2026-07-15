@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const { data, error } = await supabase
       .from('trabajadores')
-      .select('*')
+      .select('dni,nombres,apellido_paterno,apellido_materno,supervisor,eliminado,empresa_id,tipo_trabajador_id,area,cargo,tipo_trabajador,regimen,centro_costo,vigencia,fecha_ingreso,fecha_cese,cod_funcionario,planilla_nisira,created_at')
       .order('apellido_paterno', { ascending: true });
 
     if (error) throw error;
