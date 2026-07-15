@@ -103,7 +103,7 @@ def enviar_en_lotes(rows: list, lote_size: int = 200) -> dict:
 
         try:
             response = requests.post(
-                f'{API_URL}/api/trabajadores-qbiz/sync-sql',
+                f'{API_URL}/api/trabajadores-qbiz/sync',
                 json={'rows': lote},
                 headers={'Content-Type': 'application/json'},
                 timeout=120
