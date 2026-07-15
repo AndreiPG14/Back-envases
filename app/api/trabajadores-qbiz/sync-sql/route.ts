@@ -85,11 +85,14 @@ export async function POST(request: NextRequest) {
 
     if (parsed.length === 0) {
       return NextResponse.json(
-        { success: true, data: { insertados: 0, omitidos } } as ApiResponse<any>
+        {
+          success: true,
+          data: { insertados: 0, omitidos },
+        } as ApiResponse<any>
       );
     }
 
-    // Deduplicar por DNI (mantener última ocurrencia)
+    // Deduplicar por DNI
     const deduped = Object.values(
       parsed.reduce((acc: any, r: any) => {
         acc[r.dni] = r;
@@ -97,22 +100,47 @@ export async function POST(request: NextRequest) {
       }, {} as Record<string, any>)
     );
 
-    // Upsert (insertar o actualizar si ya existe)
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .upsert(deduped, { onConflict: 'dni' })
-      .select('dni,nombres,apellido_paterno,apellido_materno,supervisor,eliminado,empresa_id,tipo_trabajador_id,area,cargo,tipo_trabajador,regimen,centro_costo,vigencia,fecha_ingreso,fecha_cese,cod_funcionario,planilla_nisira,created_at');
+    // Usar SQL directo para evitar cache de schema
+    let insertados = 0;
+    for (const fila of deduped) {
+      try {
+        const { error } = await supabase.rpc('upsert_trabajador', {
+          p_dni: fila.dni,
+          p_nombres: fila.nombres,
+          p_apellido_paterno: fila.apellido_paterno,
+          p_apellido_materno: fila.apellido_materno,
+          p_empresa_id: fila.empresa_id,
+          p_supervisor: fila.supervisor,
+          p_eliminado: fila.eliminado,
+          p_area: fila.area,
+          p_cargo: fila.cargo,
+          p_tipo_trabajador: fila.tipo_trabajador,
+          p_tipo_trabajador_id: fila.tipo_trabajador_id,
+          p_regimen: fila.regimen,
+          p_centro_costo: fila.centro_costo,
+          p_vigencia: fila.vigencia,
+          p_fecha_ingreso: fila.fecha_ingreso,
+          p_fecha_cese: fila.fecha_cese,
+          p_cod_funcionario: fila.cod_funcionario,
+          p_planilla_nisira: fila.planilla_nisira,
+        });
 
-    if (error) throw error;
+        if (!error) {
+          insertados++;
+        }
+      } catch (e) {
+        // Continuar con el siguiente
+      }
+    }
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          insertados: deduped.length,
+          insertados,
           omitidos: omitidos + (parsed.length - deduped.length),
         },
-        message: `Sincronización completada: ${deduped.length} insertados, ${omitidos + (parsed.length - deduped.length)} omitidos`,
+        message: `Sincronización completada: ${insertados} insertados, ${omitidos + (parsed.length - deduped.length)} omitidos`,
       } as ApiResponse<any>
     );
   } catch (error: any) {

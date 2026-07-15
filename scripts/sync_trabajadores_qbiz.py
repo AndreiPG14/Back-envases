@@ -90,7 +90,7 @@ def leer_filas(excel_bytes: BytesIO) -> list:
         raise
 
 def enviar_en_lotes(rows: list, lote_size: int = 200) -> dict:
-    """Enviar datos a la API en lotes"""
+    """Enviar datos a la API en lotes (usando endpoint SQL)"""
     total_insertados = 0
     total_omitidos = 0
     total_lotes = (len(rows) + lote_size - 1) // lote_size
@@ -103,7 +103,7 @@ def enviar_en_lotes(rows: list, lote_size: int = 200) -> dict:
 
         try:
             response = requests.post(
-                f'{API_URL}/api/trabajadores-qbiz/sync',
+                f'{API_URL}/api/trabajadores-qbiz/sync-sql',
                 json={'rows': lote},
                 headers={'Content-Type': 'application/json'},
                 timeout=120
@@ -111,26 +111,7 @@ def enviar_en_lotes(rows: list, lote_size: int = 200) -> dict:
 
             if response.status_code not in [200, 201]:
                 print(f"❌ Error lote {lote_num}: {response.status_code}")
-                print(f"   Reintentando fila a fila...")
-
-                # Reintentar fila a fila
-                for idx, fila in enumerate(lote):
-                    try:
-                        r2 = requests.post(
-                            f'{API_URL}/api/trabajadores-qbiz/sync',
-                            json={'rows': [fila]},
-                            headers={'Content-Type': 'application/json'},
-                            timeout=30
-                        )
-
-                        if r2.status_code in [200, 201]:
-                            resultado = r2.json()
-                            total_insertados += resultado.get('data', {}).get('insertados', 0)
-                            total_omitidos += resultado.get('data', {}).get('omitidos', 0)
-                        else:
-                            print(f"   ❌ DNI={fila.get('DNI')}: {r2.text[:100]}")
-                    except Exception as e2:
-                        print(f"   ❌ DNI={fila.get('DNI')}: {e2}")
+                print(f"   Respuesta: {response.text[:200]}")
                 continue
 
             resultado = response.json()
