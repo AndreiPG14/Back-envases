@@ -5,7 +5,6 @@ export type Roles = {
 };
 
 export type Trabajadores = {
-  id: number;
   dni: string;
   nombres: string;
   apellido_paterno: string | null;
@@ -24,7 +23,7 @@ export type Trabajadores = {
   fecha_cese?: string;
   cod_funcionario?: string;
   planilla_nisira?: string;
-  created_at: string;
+  created_at?: string;
 };
 
 export type Empresa = {
