@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { dni, nombres, apellido_paterno, apellido_materno } = body;
+    const { dni, nombres, apellido_paterno, apellido_materno, ...rest } = body;
 
     if (!dni || !nombres) {
       return NextResponse.json(
@@ -35,9 +35,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Remover campos que no deben ser insertados
+    const { id, created_at, ...safeData } = {
+      dni,
+      nombres,
+      apellido_paterno,
+      apellido_materno,
+      ...rest
+    };
+
     const { data, error } = await supabase
       .from('trabajadores')
-      .insert([{ dni, nombres, apellido_paterno, apellido_materno }])
+      .upsert([safeData], { onConflict: 'dni' })
       .select();
 
     if (error) throw error;
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         data: data[0],
-        message: 'Trabajador creado exitosamente',
+        message: 'Trabajador creado/actualizado exitosamente',
       } as ApiResponse<Trabajadores>,
       { status: 201 }
     );
