@@ -21,8 +21,8 @@ interface QbizRow {
 }
 
 const empresaIdMap: Record<string, number> = {
-  'AQU_ANQA': 1,
-  'AQU_ANQA2': 2,
+  'AQU_ANQA': 5,
+  'AQU_ANQA2': 6,
 };
 
 const tipoTrabajadorIdMap: Record<string, number> = {
