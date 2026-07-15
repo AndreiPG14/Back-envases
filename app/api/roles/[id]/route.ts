@@ -1,119 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { Roles, ApiResponse } from '@/lib/types';
+import { validarRequeridos, validarMaxLength, formatearErrores } from '@/lib/validations';
 
-// GET: Obtener rol por ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    if (!id || isNaN(Number(id))) return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
 
-    const { data, error } = await supabase
-      .from('roles')
-      .select('*')
-      .eq('id', id)
-      .single();
-
+    const { data, error } = await supabase.from('roles').select('*').eq('id', id).single();
     if (error) throw error;
+    if (!data) return NextResponse.json({ success: false, error: 'Rol no encontrado' }, { status: 404 });
 
-    if (!data) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Rol no encontrado',
-        } as ApiResponse<null>,
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data,
-    } as ApiResponse<Roles>);
+    return NextResponse.json({ success: true, data } as ApiResponse<Roles>);
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }
 }
 
-// PUT: Actualizar rol
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    if (!id || isNaN(Number(id))) return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
+
     const body = await request.json();
-    const { descripcion } = body;
+    const errores = [
+      ...validarRequeridos(body, ['descripcion']),
+      ...validarMaxLength(body, { descripcion: 100 }),
+    ];
+    if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
 
-    if (!descripcion) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'descripcion es requerido',
-        } as ApiResponse<null>,
-        { status: 400 }
-      );
-    }
-
-    const { data, error } = await supabase
-      .from('roles')
-      .update({ descripcion })
-      .eq('id', id)
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('roles').update({ descripcion: body.descripcion }).eq('id', id).select().single();
     if (error) throw error;
 
-    return NextResponse.json({
-      success: true,
-      data,
-      message: 'Rol actualizado exitosamente',
-    } as ApiResponse<Roles>);
+    return NextResponse.json({ success: true, data, message: 'Rol actualizado exitosamente' } as ApiResponse<Roles>);
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }
 }
 
-// DELETE: Eliminar rol
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    if (!id || isNaN(Number(id))) return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
 
-    const { error } = await supabase
-      .from('roles')
-      .delete()
-      .eq('id', id);
-
+    const { error } = await supabase.from('roles').delete().eq('id', id);
     if (error) throw error;
 
-    return NextResponse.json({
-      success: true,
-      message: 'Rol eliminado exitosamente',
-    } as ApiResponse<null>);
+    return NextResponse.json({ success: true, message: 'Rol eliminado exitosamente' } as ApiResponse<null>);
   } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message,
-      } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }
 }

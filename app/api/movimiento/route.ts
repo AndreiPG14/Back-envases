@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { Movimiento, ApiResponse } from '@/lib/types';
+import { validarRequeridos, validarNumeroPositivo, formatearErrores } from '@/lib/validations';
 
-// GET: Todos los movimientos con trazabilidad completa
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url);
+    const fecha_inicio = searchParams.get('fecha_inicio');
+    const fecha_fin = searchParams.get('fecha_fin');
+    const idmaterial = searchParams.get('idmaterial');
+    const idfundo = searchParams.get('idfundo');
+
+    let query = supabase
       .from('movimiento')
       .select(`
         *,
-        usuario_origen:idusuarioorigen(id, grupo, trabajadores(nombres, dni)),
-        usuario_destino:idusuariodestino(id, grupo, trabajadores(nombres, dni)),
+        usuario_origen:idusuarioorigen(id, grupo, trabajadores(nombres, apellido_paterno, dni)),
+        usuario_destino:idusuariodestino(id, grupo, trabajadores(nombres, apellido_paterno, dni)),
         material:idmaterial(id, descripcion, stock),
         vehiculo:idvehiculo(id, placa, marca),
         fundo_origen:idfundoorigen(id, descripcion),
@@ -19,120 +25,94 @@ export async function GET(request: NextRequest) {
       `)
       .order('fecha', { ascending: false });
 
+    if (fecha_inicio) query = query.gte('fecha', fecha_inicio);
+    if (fecha_fin) query = query.lte('fecha', fecha_fin);
+    if (idmaterial) query = query.eq('idmaterial', idmaterial);
+    if (idfundo) query = query.or(`idfundoorigen.eq.${idfundo},idfundodestino.eq.${idfundo}`);
+
+    const { data, error } = await query;
     if (error) throw error;
     return NextResponse.json({ success: true, data } as ApiResponse<any[]>);
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }
 }
 
-// POST: Crear movimiento y actualizar stock
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      fecha,
-      idusuarioorigen,
-      idusuariodestino,
-      idmaterial,
-      idvehiculo,
-      idfundoorigen,
-      idfundodestino,
-      idoperacion,
-      precinto,
-      observaciones,
-    } = body;
 
-    // Validaciones
-    if (
-      !fecha ||
-      !idusuarioorigen ||
-      !idmaterial ||
-      !idfundoorigen ||
-      !idfundodestino ||
-      !idoperacion
-    ) {
-      return NextResponse.json(
-        {
+    // Validar campos requeridos
+    const errores = [
+      ...validarRequeridos(body, ['fecha', 'idusuarioorigen', 'idmaterial', 'idfundoorigen', 'idfundodestino', 'idoperacion', 'cantidad']),
+      ...validarNumeroPositivo(body, ['cantidad']),
+    ];
+    if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
+
+    // Verificar que fundo origen y destino no sean iguales
+    if (body.idfundoorigen === body.idfundodestino) {
+      return NextResponse.json({ success: false, error: 'Fundo origen y destino no pueden ser iguales' }, { status: 400 });
+    }
+
+    // Verificar que el material existe
+    const { data: material } = await supabase.from('materiales').select('id, stock, descripcion').eq('id', body.idmaterial).single();
+    if (!material) return NextResponse.json({ success: false, error: 'El material no existe' }, { status: 404 });
+
+    // Verificar que la operación existe
+    const { data: operacion } = await supabase.from('operacion').select('id, descripcion').eq('id', body.idoperacion).single();
+    if (!operacion) return NextResponse.json({ success: false, error: 'La operación no existe' }, { status: 404 });
+
+    // Verificar stock suficiente si es SALIDA
+    if (operacion.descripcion?.toUpperCase() === 'SALIDA') {
+      if (material.stock < body.cantidad) {
+        return NextResponse.json({
           success: false,
-          error: 'Campos requeridos: fecha, idusuarioorigen, idmaterial, idfundoorigen, idfundodestino, idoperacion',
-        } as ApiResponse<null>,
-        { status: 400 }
-      );
+          error: `Stock insuficiente. Stock actual: ${material.stock}, cantidad solicitada: ${body.cantidad}`,
+        }, { status: 400 });
+      }
     }
 
-    // Obtener operación y material para actualizar stock
-    const { data: operacionData } = await supabase
-      .from('operacion')
-      .select('descripcion')
-      .eq('id', idoperacion)
-      .single();
-
-    const { data: materialData } = await supabase
-      .from('materiales')
-      .select('stock')
-      .eq('id', idmaterial)
-      .single();
-
-    if (!materialData) {
-      return NextResponse.json(
-        { success: false, error: 'Material no encontrado' } as ApiResponse<null>,
-        { status: 404 }
-      );
+    // Calcular nuevo stock
+    let nuevoStock = material.stock;
+    if (operacion.descripcion?.toUpperCase() === 'INGRESO') {
+      nuevoStock += Number(body.cantidad);
+    } else if (operacion.descripcion?.toUpperCase() === 'SALIDA') {
+      nuevoStock -= Number(body.cantidad);
     }
 
-    // Calcular nuevo stock según operación
-    let nuevoStock = materialData.stock;
-    if (operacionData?.descripcion?.toUpperCase() === 'INGRESO') {
-      nuevoStock += body.cantidad || 0;
-    } else if (operacionData?.descripcion?.toUpperCase() === 'SALIDA') {
-      nuevoStock -= body.cantidad || 0;
-    }
-
-    // Iniciar transacción: crear movimiento y actualizar stock
+    // Crear movimiento
     const { data: movimientoData, error: movError } = await supabase
       .from('movimiento')
-      .insert([
-        {
-          fecha,
-          idusuarioorigen,
-          idusuariodestino,
-          idmaterial,
-          idvehiculo,
-          idfundoorigen,
-          idfundodestino,
-          idoperacion,
-          precinto,
-          observaciones,
-        },
-      ])
+      .insert([{
+        fecha: body.fecha,
+        idusuarioorigen: body.idusuarioorigen,
+        idusuariodestino: body.idusuariodestino ?? null,
+        idmaterial: body.idmaterial,
+        idvehiculo: body.idvehiculo ?? null,
+        idfundoorigen: body.idfundoorigen,
+        idfundodestino: body.idfundodestino,
+        idoperacion: body.idoperacion,
+        precinto: body.precinto ?? null,
+        observaciones: body.observaciones ?? null,
+      }])
       .select();
 
     if (movError) throw movError;
 
-    // Actualizar stock del material
+    // Actualizar stock
     const { error: stockError } = await supabase
       .from('materiales')
       .update({ stock: nuevoStock })
-      .eq('id', idmaterial);
+      .eq('id', body.idmaterial);
 
     if (stockError) throw stockError;
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: movimientoData[0],
-        message: `Movimiento creado. Stock actualizado: ${nuevoStock}`,
-      } as ApiResponse<Movimiento>,
-      { status: 201 }
-    );
+    return NextResponse.json({
+      success: true,
+      data: movimientoData[0],
+      message: `Movimiento registrado. Stock actualizado: ${nuevoStock}`,
+    } as ApiResponse<Movimiento>, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }
 }
