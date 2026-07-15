@@ -1,0 +1,28 @@
+name: Sync Trabajadores → Supabase
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # cada lunes a las 6am UTC
+  workflow_dispatch:      # ejecución manual
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run sync
+        env:
+          API_URL: ${{ secrets.API_URL }}
+          EXCEL_PATH: 'trabajadores.xlsx'
+        run: python scripts/sync_trabajadores_qbiz.py
