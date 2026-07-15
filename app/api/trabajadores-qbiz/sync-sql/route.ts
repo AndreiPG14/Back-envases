@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     // Usar SQL directo para evitar cache de schema
     let insertados = 0;
-    for (const fila of deduped) {
+    for (const fila of deduped as any[]) {
       try {
         const { error } = await supabase.rpc('upsert_trabajador', {
           p_dni: fila.dni,
