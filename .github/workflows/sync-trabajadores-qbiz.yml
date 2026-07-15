@@ -1,4 +1,4 @@
-name: Sync Trabajadores → Supabase
+name: Sync Trabajadores QBIZ → Supabase
 
 on:
   schedule:
@@ -24,5 +24,5 @@ jobs:
       - name: Run sync
         env:
           API_URL: ${{ secrets.API_URL }}
-          EXCEL_PATH: 'trabajadores.xlsx'
+          ONEDRIVE_SHARE_URL: ${{ secrets.ONEDRIVE_SHARE_URL }}
         run: python scripts/sync_trabajadores_qbiz.py
