@@ -1,84 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { Operacion, ApiResponse } from '@/lib/types';
+import { ApiResponse } from '@/lib/types';
+import { validarRequeridos, validarMaxLength, formatearErrores, verificarDuplicado } from '@/lib/validations';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const { data, error } = await supabase
-      .from('operacion')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) throw error;
-    if (!data) {
-      return NextResponse.json(
-        { success: false, error: 'Operación no encontrada' } as ApiResponse<null>,
-        { status: 404 }
-      );
-    }
-    return NextResponse.json({ success: true, data } as ApiResponse<Operacion>);
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message } as ApiResponse<null>,
-      { status: 500 }
-    );
-  }
-}
-
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await request.json();
 
+    const errores = [
+      ...validarRequeridos(body, ['descripcion']),
+      ...validarMaxLength(body, { descripcion: 100 }),
+    ];
+    if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
+
+    if (await verificarDuplicado(supabase, 'operacion', 'descripcion', body.descripcion, Number(id))) {
+      return NextResponse.json({ success: false, error: 'Ya existe una operación con esa descripción' }, { status: 409 });
+    }
+
     const { data, error } = await supabase
       .from('operacion')
-      .update(body)
+      .update({ descripcion: body.descripcion })
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
-    return NextResponse.json({
-      success: true,
-      data,
-      message: 'Operación actualizada exitosamente',
-    } as ApiResponse<Operacion>);
+    return NextResponse.json({ success: true, data, message: 'Operación actualizada' } as ApiResponse<any>);
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { error } = await supabase
-      .from('operacion')
-      .delete()
-      .eq('id', id);
-
+    const { error } = await supabase.from('operacion').delete().eq('id', id);
     if (error) throw error;
-    return NextResponse.json({
-      success: true,
-      message: 'Operación eliminada exitosamente',
-    } as ApiResponse<null>);
+    return NextResponse.json({ success: true, message: 'Operación eliminada' });
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
