@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { ApiResponse } from '@/lib/types';
+import bcrypt from 'bcryptjs';
 
 export async function GET(
   request: NextRequest,
@@ -31,6 +32,12 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
+
+    if (body.password) {
+      body.password = await bcrypt.hash(body.password, 10);
+    } else {
+      delete body.password;
+    }
 
     const { data: updated, error } = await supabase.from('usuario').update(body).eq('id', id).select('*').single();
     if (error) throw error;
