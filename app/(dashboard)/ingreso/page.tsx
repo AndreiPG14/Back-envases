@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PackagePlus, Plus, X, Loader2, Calendar, ChevronDown } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 
 interface Material { id: number; descripcion: string; um: string }
 interface Fundo    { id: number; descripcion: string }
+interface Usuario  { id: number; username: string }
 interface Ingreso  {
   id: number;
   idmaterial: number;
@@ -36,7 +37,7 @@ export default function IngresoPage() {
 
   const fmt = (fechaStr: string) => {
     const d = new Date(fechaStr);
-    return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Lima' });
   };
 
   return (
@@ -124,24 +125,37 @@ function ModalIngreso({ onClose, onSaved }: { onClose: () => void; onSaved: () =
   const [fundos, setFundos]         = useState<Fundo[]>([]);
   const [saving, setSaving]         = useState(false);
   const [errorMsg, setErrorMsg]     = useState('');
+  const [idusuario, setIdusuario]   = useState<number | null>(null);
+  const [now, setNow]               = useState(new Date());
 
   const [idmaterial, setIdmaterial]     = useState('');
   const [idfundo, setIdfundo]           = useState('');
   const [cantidad, setCantidad]         = useState('');
-  const [fecha, setFecha]               = useState(() => new Date().toISOString().slice(0, 16));
   const [observaciones, setObservaciones] = useState('');
+
+  // Reloj en vivo
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const fmtLocal = (d: Date) => {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
 
   useEffect(() => {
     Promise.all([
       fetch('/api/materiales').then((r) => r.json()),
       fetch('/api/fundo').then((r) => r.json()),
-    ]).then(([mRes, fRes]) => {
+      fetch('/api/auth/me').then((r) => r.json()),
+    ]).then(([mRes, fRes, meRes]) => {
       setMateriales(mRes.data ?? []);
       const fundoList: Fundo[] = fRes.data ?? [];
       setFundos(fundoList);
-      // Default: primer fundo cuya descripción contenga "ALMACEN"
       const almacen = fundoList.find((f) => f.descripcion.toUpperCase().includes('ALMACEN'));
       if (almacen) setIdfundo(String(almacen.id));
+      if (meRes.user?.id) setIdusuario(meRes.user.id);
     });
   }, []);
 
@@ -160,8 +174,9 @@ function ModalIngreso({ onClose, onSaved }: { onClose: () => void; onSaved: () =
       body: JSON.stringify({
         idmaterial: Number(idmaterial),
         idfundo: Number(idfundo),
+        idusuario: idusuario,
         cantidad: Number(cantidad),
-        fecha: new Date(fecha).toISOString(),
+        fecha: fmtLocal(new Date()),
         observaciones: observaciones.trim() || null,
       }),
     }).then((r) => r.json());
@@ -218,6 +233,7 @@ function ModalIngreso({ onClose, onSaved }: { onClose: () => void; onSaved: () =
             </div>
           </div>
 
+
           {/* Cantidad */}
           <div>
             <label className={labelCls}>Cantidad <span className="text-red-400">*</span></label>
@@ -232,15 +248,19 @@ function ModalIngreso({ onClose, onSaved }: { onClose: () => void; onSaved: () =
             />
           </div>
 
-          {/* Fecha */}
+          {/* Reloj en vivo */}
           <div>
-            <label className={labelCls}>Fecha</label>
-            <input
-              type="datetime-local"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className={inputCls}
-            />
+            <label className={labelCls}>Fecha y hora de registro</label>
+            <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-3">
+              <span className="text-lg font-mono font-bold text-gray-800 tabular-nums tracking-widest">
+                {String(now.getHours()).padStart(2,'0')}:{String(now.getMinutes()).padStart(2,'0')}
+                <span className="text-emerald-500">:{String(now.getSeconds()).padStart(2,'0')}</span>
+              </span>
+              <span className="text-xs text-gray-400">
+                {now.toLocaleDateString('es-PE', { day:'2-digit', month:'short', year:'numeric' })}
+              </span>
+              <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">EN VIVO</span>
+            </div>
           </div>
 
           {/* Observaciones */}

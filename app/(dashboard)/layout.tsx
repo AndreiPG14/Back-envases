@@ -1,5 +1,6 @@
 import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
+import AlertasMerma from '../components/AlertasMerma';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -11,6 +12,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </main>
       </div>
+      <AlertasMerma />
     </div>
   );
 }

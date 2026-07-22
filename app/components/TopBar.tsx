@@ -1,7 +1,8 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { Bell, Search } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Bell, Search, LogOut } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const titles: Record<string, { label: string; desc: string }> = {
   '/materiales':   { label: 'Materiales',    desc: 'Inventario de materiales' },
@@ -17,7 +18,24 @@ const titles: Record<string, { label: string; desc: string }> = {
 
 export default function TopBar() {
   const pathname = usePathname();
-  const page = titles[pathname] ?? { label: 'Inicio', desc: '' };
+  const router   = useRouter();
+  const page     = titles[pathname] ?? { label: 'Inicio', desc: '' };
+
+  const [username, setUsername] = useState<string>('');
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => { if (d.user?.username) setUsername(d.user.username); })
+      .catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/login');
+  };
+
+  const initials = username ? username.slice(0, 2).toUpperCase() : 'A';
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
@@ -43,12 +61,19 @@ export default function TopBar() {
 
         <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-            A
+            {initials}
           </div>
           <div className="hidden sm:block">
-            <p className="text-xs font-semibold text-gray-700 leading-tight">Admin</p>
+            <p className="text-xs font-semibold text-gray-700 leading-tight">{username || 'Admin'}</p>
             <p className="text-[10px] text-gray-400">Almacén Campo</p>
           </div>
+          <button
+            onClick={handleLogout}
+            title="Cerrar sesión"
+            className="ml-1 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            <LogOut size={15} />
+          </button>
         </div>
       </div>
     </header>

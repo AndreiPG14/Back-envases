@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, X, Loader2, ChevronDown } from 'lucide-react';
+
+const UMS = ['und', 'kg', 'ha', 't'];
 import PageHeader from '../../components/PageHeader';
 import SearchInput from '../../components/SearchInput';
 
@@ -188,12 +190,8 @@ function ModalMaterial({
     else setErrorMsg(res.error ?? 'Error al guardar');
   };
 
-  const fields = [
-    { key: 'descripcion', label: 'Descripción',     required: true,  placeholder: 'Ej: Alambre #16, Cemento...' },
-    { key: 'cod',         label: 'Código',           required: false, placeholder: 'Ej: MAT-001' },
-    { key: 'um',          label: 'Unidad de medida', required: false, placeholder: 'Ej: kg, und, m2, lt...' },
-    { key: 'pu',          label: 'Precio unitario',  required: false, placeholder: '0.00', type: 'number' },
-  ];
+  const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500';
+  const labelCls = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -211,24 +209,47 @@ function ModalMaterial({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {fields.map(({ key, label, required, placeholder, type }) => (
-            <div key={key}>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
-                {label} {required
-                  ? <span className="text-red-400">*</span>
-                  : <span className="text-gray-400 font-normal">(opcional)</span>}
-              </label>
-              <input
-                type={type ?? 'text'}
-                value={form[key as keyof typeof form]}
-                onChange={set(key)}
-                placeholder={placeholder}
-                min={type === 'number' ? 0 : undefined}
-                step={key === 'pu' ? '0.01' : undefined}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+          {/* Descripción */}
+          <div>
+            <label className={labelCls}>Descripción <span className="text-red-400">*</span></label>
+            <input type="text" value={form.descripcion} onChange={set('descripcion')}
+              placeholder="Ej: Jarras, Cemento..." className={inputCls} />
+          </div>
+
+          {/* Código */}
+          <div>
+            <label className={labelCls}>Código <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <input type="text" value={form.cod} onChange={set('cod')}
+              placeholder="Ej: MAT-001" className={inputCls} />
+          </div>
+
+          {/* Unidad de medida — selector */}
+          <div>
+            <label className={labelCls}>Unidad de medida</label>
+            <div className="flex gap-2">
+              {UMS.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, um: u }))}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-lg border-2 transition-colors ${
+                    form.um === u
+                      ? 'bg-emerald-600 border-emerald-600 text-white'
+                      : 'bg-white border-gray-200 text-gray-500 hover:border-emerald-400'
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Precio unitario */}
+          <div>
+            <label className={labelCls}>Precio unitario <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <input type="number" value={form.pu} onChange={set('pu')}
+              placeholder="0.00" min={0} step="0.01" className={inputCls} />
+          </div>
 
           {errorMsg && (
             <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm">{errorMsg}</div>

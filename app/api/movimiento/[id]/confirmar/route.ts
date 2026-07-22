@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const cantConfirmada = Number(cantidad_confirmada);
     const merma = Number(mov.cantidad) - cantConfirmada;
-    const estado = merma === 0 ? 'CONFIRMADO' : 'PARCIAL';
+    const estado = merma === 0 ? 'COMPLETO' : 'INCOMPLETO';
 
     // Aumentar stock en destino solo por la cantidad confirmada
     if (cantConfirmada > 0) {

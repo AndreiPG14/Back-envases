@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       id: user.id,
       username: user.username ?? '',
       grupo: user.grupo ?? '',
+      idfundo: user.idfundo ?? null,
       trabajador: trabajador
         ? {
             id: parseInt(trabajador.dni, 10) || 0,
@@ -83,7 +84,18 @@ export async function POST(request: NextRequest) {
       empresa: null,
     };
 
-    return NextResponse.json({ token, user: userResponse });
+    const response = NextResponse.json({ token, user: userResponse });
+
+    // Cookie HTTP-only para sesión web (30 días)
+    response.cookies.set('web_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30,
+      path: '/',
+    });
+
+    return response;
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message },

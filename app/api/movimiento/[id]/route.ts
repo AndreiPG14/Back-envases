@@ -49,8 +49,18 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    // Solo permitir actualizar observaciones y precinto
-    const allowedFields = { observaciones: body.observaciones, precinto: body.precinto };
+    const allowedFields: Record<string, any> = {
+      observaciones: body.observaciones,
+      precinto:      body.precinto,
+    };
+
+    const ESTADOS_VALIDOS = ['PENDIENTE', 'COMPLETO', 'INCOMPLETO'];
+    if (body.estado !== undefined) {
+      if (!ESTADOS_VALIDOS.includes(body.estado)) {
+        return NextResponse.json({ success: false, error: 'Estado inválido' }, { status: 400 });
+      }
+      allowedFields.estado = body.estado;
+    }
 
     const { data, error } = await supabase
       .from('movimiento')
@@ -73,16 +83,35 @@ export async function PUT(
   }
 }
 
-// DELETE: No permitir eliminar movimientos (auditoría)
+// DELETE: Solo si no tiene detalles (cabecera incompleta/borrador)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  return NextResponse.json(
-    {
-      success: false,
-      error: 'No se pueden eliminar movimientos (auditoría requerida)',
-    } as ApiResponse<null>,
-    { status: 403 }
-  );
+  try {
+    const { id } = await params;
+
+    // Verificar que no tenga detalles
+    const { count } = await supabase
+      .from('movimiento_detalle')
+      .select('id', { count: 'exact', head: true })
+      .eq('idmovimiento', id);
+
+    if ((count ?? 0) > 0) {
+      return NextResponse.json(
+        { success: false, error: 'No se puede eliminar: el movimiento ya tiene detalles registrados' },
+        { status: 409 }
+      );
+    }
+
+    const { error } = await supabase.from('movimiento').delete().eq('id', id);
+    if (error) throw error;
+
+    return NextResponse.json({ success: true, message: 'Cabecera eliminada' });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message } as ApiResponse<null>,
+      { status: 500 }
+    );
+  }
 }

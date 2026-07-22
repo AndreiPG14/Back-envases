@@ -23,7 +23,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const errores = [
       ...validarRequeridos(body, ['descripcion']),
       ...validarMaxLength(body, { descripcion: 150, cod: 50, um: 50 }),
-      ...validarNumeroPositivo(body, ['stock', 'pu']),
+      ...validarNumeroPositivo(body, ['pu']),
     ];
     if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
 
@@ -35,10 +35,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .from('materiales')
       .update({
         descripcion: body.descripcion,
-        stock:       body.stock ?? 0,
-        um:          body.um   ?? null,
-        cod:         body.cod  ?? null,
-        pu:          body.pu   ?? null,
+        um:          body.um  ?? null,
+        cod:         body.cod ?? null,
+        pu:          body.pu  ?? null,
       })
       .eq('id', id)
       .select()
