@@ -20,7 +20,7 @@ export async function PUT(
     // Obtener detalle actual para calcular merma
     const { data: detalle, error: detErr } = await supabase
       .from('movimiento_detalle')
-      .select('cantidad, idfundodestino, idmaterial, cantidad_confirmada as cant_conf_prev')
+      .select('cantidad, idfundodestino, idmaterial, cantidad_confirmada')
       .eq('id', id)
       .single();
 
@@ -49,7 +49,7 @@ export async function PUT(
 
       // Ajustar stock en destino si ya había una confirmación previa
       if (detalle.idfundodestino && detalle.idmaterial) {
-        const prevConf = Number(detalle.cant_conf_prev ?? 0);
+        const prevConf = Number(detalle.cantidad_confirmada ?? 0);
         const diff = cantConf - prevConf;
         if (diff !== 0) {
           const { data: sf } = await supabase
