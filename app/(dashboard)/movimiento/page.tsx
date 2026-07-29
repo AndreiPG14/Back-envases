@@ -181,6 +181,21 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
             </div>
           )}
 
+          {/* Foto de la carga */}
+          {mov.foto_url && (
+            <>
+              <hr className="border-gray-100" />
+              <div>
+                <p className="text-xs text-gray-400 mb-2">Foto de la carga</p>
+                <img
+                  src={mov.foto_url}
+                  alt="Foto de la carga"
+                  className="w-full rounded-xl object-cover max-h-56"
+                />
+              </div>
+            </>
+          )}
+
           {/* ── Modo edición ── */}
           {editMode && (
             <div className="border-t border-gray-100 pt-4 space-y-4">
