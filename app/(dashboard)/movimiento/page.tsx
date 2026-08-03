@@ -293,16 +293,16 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
             </div>
           )}
 
-          {/* Foto de la carga */}
-          {mov.foto_url && (
+          {/* Foto del material (por detalle) */}
+          {detalle.foto_url && (
             <>
               <hr className="border-gray-100" />
               <div>
-                <p className="text-xs text-gray-400 mb-2">Foto de la carga</p>
+                <p className="text-xs text-gray-400 mb-2">Foto del material</p>
                 <div className="relative group cursor-zoom-in" onClick={() => setFotoAmpliada(true)}>
                   <img
-                    src={mov.foto_url}
-                    alt="Foto de la carga"
+                    src={detalle.foto_url}
+                    alt="Foto del material"
                     className="w-full rounded-xl object-cover max-h-56"
                   />
                   <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
@@ -324,8 +324,8 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
                     <X size={28} />
                   </button>
                   <img
-                    src={mov.foto_url}
-                    alt="Foto de la carga"
+                    src={detalle.foto_url}
+                    alt="Foto del material"
                     className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -541,7 +541,7 @@ export default function MovimientoPage() {
                         <table className="min-w-full text-sm">
                           <thead>
                             <tr className="border-b border-gray-200">
-                              {['Hora', 'Tipo', 'Material', 'Cantidad', 'Ubic. Destino', 'Estado'].map((h) => (
+                              {['Hora', 'Tipo', 'Material', 'Cantidad', 'Ubic. Destino', 'Estado', ''].map((h) => (
                                 <th key={h} className="px-5 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">{h}</th>
                               ))}
                             </tr>
@@ -582,6 +582,11 @@ export default function MovimientoPage() {
                                       ? <span className="bg-orange-100 text-orange-700 text-xs font-semibold px-2 py-0.5 rounded-full">Incompleto</span>
                                       : <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">Completo</span>
                                     }
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {d.foto_url && (
+                                      <span title="Tiene foto" className="text-indigo-400">📷</span>
+                                    )}
                                   </td>
                                 </tr>
                               );
