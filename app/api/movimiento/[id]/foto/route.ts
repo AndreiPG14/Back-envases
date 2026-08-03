@@ -47,22 +47,30 @@ export async function POST(
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
     const path = `mov_${movId}_${Date.now()}.${ext}`;
 
-    console.log('[foto] Subiendo a bucket:', BUCKET, 'path:', path, 'size:', file.size);
-
-    // Uint8Array evita que el cliente Supabase pase por btoa() internamente
     const arrayBuffer = await file.arrayBuffer();
-    const fileBytes = new Uint8Array(arrayBuffer);
+    console.log('[foto] Subiendo a bucket:', BUCKET, 'path:', path, 'size:', arrayBuffer.byteLength);
 
-    const { error: uploadErr } = await admin.storage
-      .from(BUCKET)
-      .upload(path, fileBytes, {
-        contentType: file.type || 'image/jpeg',
-        upsert: true,
-      });
+    // Fetch directo al REST API de Supabase Storage — el cliente JS llama btoa() internamente
+    const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-    if (uploadErr) {
-      console.error('[foto] Error upload storage:', uploadErr);
-      throw uploadErr;
+    const uploadRes = await fetch(
+      `${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': file.type || 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: arrayBuffer,
+      }
+    );
+
+    if (!uploadRes.ok) {
+      const errBody = await uploadRes.text();
+      console.error('[foto] uploadErr:', uploadRes.status, errBody);
+      throw new Error(`Upload falló (${uploadRes.status}): ${errBody}`);
     }
     console.log('[foto] Upload exitoso → path:', path);
 
