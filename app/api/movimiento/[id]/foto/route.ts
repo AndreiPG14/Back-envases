@@ -49,10 +49,13 @@ export async function POST(
 
     console.log('[foto] Subiendo a bucket:', BUCKET, 'path:', path, 'size:', file.size);
 
-    // Pasar el File/Blob directamente — evita la conversión a Buffer que falla con btoa()
+    // Uint8Array evita que el cliente Supabase pase por btoa() internamente
+    const arrayBuffer = await file.arrayBuffer();
+    const fileBytes = new Uint8Array(arrayBuffer);
+
     const { error: uploadErr } = await admin.storage
       .from(BUCKET)
-      .upload(path, file, {
+      .upload(path, fileBytes, {
         contentType: file.type || 'image/jpeg',
         upsert: true,
       });
