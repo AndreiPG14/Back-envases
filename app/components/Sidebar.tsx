@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Package, Truck, Wheat, Building2, Settings2,
-  ShieldCheck, HardHat, UserCircle, ArrowLeftRight,
+  ShieldCheck, UserCircle, ArrowLeftRight,
   Warehouse, ChevronRight, PackagePlus, LayoutGrid,
 } from 'lucide-react';
 
@@ -18,7 +18,6 @@ const groups = [
       { href: '/empresa',      label: 'Empresas',     icon: Building2   },
       { href: '/operacion',    label: 'Operaciones',  icon: Settings2   },
       { href: '/roles',        label: 'Roles',        icon: ShieldCheck },
-      { href: '/trabajadores', label: 'Trabajadores', icon: HardHat     },
       { href: '/usuario',      label: 'Usuarios',     icon: UserCircle  },
     ],
   },

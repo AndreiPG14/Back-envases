@@ -11,7 +11,6 @@ const titles: Record<string, { label: string; desc: string }> = {
   '/empresa':      { label: 'Empresas',      desc: 'Empresas registradas' },
   '/operacion':    { label: 'Operaciones',   desc: 'Tipos de operación' },
   '/roles':        { label: 'Roles',         desc: 'Roles de usuario' },
-  '/trabajadores': { label: 'Trabajadores',  desc: 'Personal de campo' },
   '/usuario':      { label: 'Usuarios',      desc: 'Usuarios del sistema' },
   '/movimiento':   { label: 'Movimientos',   desc: 'Historial de movimientos' },
 };

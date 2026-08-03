@@ -1,8 +1,119 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
+
+// ── Modal QR ──────────────────────────────────────────────────────────────────
+function ModalQR({ mov, onClose }: { mov: any; onClose: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const fmtFecha = (v: string) => v
+    ? new Date(v).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'America/Lima' })
+    : '—';
+
+  const detalles: any[] = mov.movimiento_detalle ?? [];
+
+  const lineasItems = detalles.map((d: any) => {
+    const mat  = d.material?.descripcion ?? '—';
+    const qty  = d.cantidad ?? 0;
+    const um   = d.material?.um ?? '';
+    const dest = d.fundo_destino?.descripcion ?? '';
+    const tipo = d.operacion?.descripcion?.toUpperCase() === 'TRASLADO' ? '→' : '↑';
+    return `${tipo} ${mat}: ${qty} ${um}${dest ? ` (${dest})` : ''}`;
+  }).join('\n');
+
+  const qrData = [
+    `MOV #${mov.id}`,
+    `Fecha: ${fmtFecha(mov.fecha)}`,
+    `Origen: ${mov.fundo_origen?.descripcion ?? '—'}`,
+    mov.vehiculo?.placa ? `Placa: ${mov.vehiculo.placa}` : null,
+    mov.precinto        ? `Precinto: ${mov.precinto}` : null,
+    `---`,
+    lineasItems,
+  ].filter(Boolean).join('\n');
+
+  useEffect(() => {
+    import('qrcode').then((QRCode) => {
+      if (!canvasRef.current) return;
+      QRCode.toCanvas(canvasRef.current, qrData, {
+        width: 240,
+        margin: 2,
+        color: { dark: '#1A2332', light: '#FFFFFF' },
+      });
+    });
+  }, [qrData]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        {/* header */}
+        <div className="px-5 py-4 flex items-center justify-between bg-slate-800">
+          <div className="flex items-center gap-2 text-white">
+            <QrCode size={18} />
+            <span className="font-semibold">Pase de garita</span>
+            <span className="opacity-60 text-sm">· #{mov.id}</span>
+          </div>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          {/* QR */}
+          <div className="flex justify-center">
+            <canvas ref={canvasRef} className="rounded-xl" />
+          </div>
+
+          {/* Datos resumen */}
+          <div className="bg-slate-50 rounded-xl px-4 py-3 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-400">Fecha</span>
+              <span className="font-medium text-gray-700">{fmtFecha(mov.fecha)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Origen</span>
+              <span className="font-medium text-gray-700">{mov.fundo_origen?.descripcion ?? '—'}</span>
+            </div>
+            {mov.vehiculo?.placa && (
+              <div className="flex justify-between">
+                <span className="text-gray-400">Vehículo</span>
+                <span className="font-mono font-semibold text-gray-800 bg-slate-200 px-2 py-0.5 rounded text-xs">{mov.vehiculo.placa}</span>
+              </div>
+            )}
+            {mov.precinto && (
+              <div className="flex justify-between">
+                <span className="text-gray-400">Precinto</span>
+                <span className="font-medium text-gray-700">{mov.precinto}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Items */}
+          {detalles.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Materiales</p>
+              <div className="space-y-1.5">
+                {detalles.map((d: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-700 font-medium">{d.material?.descripcion ?? '—'}</span>
+                    <span className="text-gray-500">{d.cantidad} {d.material?.um ?? ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button onClick={onClose}
+            className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition-colors">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Modal detalle ─────────────────────────────────────────────────────────────
 function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated }: {
@@ -15,6 +126,7 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
   const [observacion, setObs]     = useState('');
   const [saving, setSaving]       = useState(false);
   const [err, setErr]             = useState('');
+  const [fotoAmpliada, setFotoAmpliada] = useState(false);
 
   const tipo       = detalle.operacion?.descripcion?.toUpperCase();
   const esTraslado = tipo === 'TRASLADO';
@@ -187,12 +299,38 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
               <hr className="border-gray-100" />
               <div>
                 <p className="text-xs text-gray-400 mb-2">Foto de la carga</p>
-                <img
-                  src={mov.foto_url}
-                  alt="Foto de la carga"
-                  className="w-full rounded-xl object-cover max-h-56"
-                />
+                <div className="relative group cursor-zoom-in" onClick={() => setFotoAmpliada(true)}>
+                  <img
+                    src={mov.foto_url}
+                    alt="Foto de la carga"
+                    className="w-full rounded-xl object-cover max-h-56"
+                  />
+                  <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
+                      Ver ampliada
+                    </span>
+                  </div>
+                </div>
               </div>
+              {fotoAmpliada && (
+                <div
+                  className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
+                  onClick={() => setFotoAmpliada(false)}
+                >
+                  <button
+                    className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+                    onClick={() => setFotoAmpliada(false)}
+                  >
+                    <X size={28} />
+                  </button>
+                  <img
+                    src={mov.foto_url}
+                    alt="Foto de la carga"
+                    className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -298,6 +436,7 @@ export default function MovimientoPage() {
   const [error, setError]         = useState('');
   const [expanded, setExpanded]   = useState<Set<number>>(new Set());
   const [selected, setSelected]   = useState<{ detalle: any; mov: any } | null>(null);
+  const [qrMov, setQrMov]         = useState<any | null>(null);
 
   useEffect(() => {
     fetch('/api/movimiento')
@@ -368,21 +507,30 @@ export default function MovimientoPage() {
               return (
                 <div key={mov.id}>
                   {/* Cabecera */}
-                  <button
-                    onClick={() => toggleExpand(mov.id)}
-                    className="w-full flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left"
-                  >
-                    {isOpen ? <ChevronDown size={14} className="text-gray-400 shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
-                    <span className="text-xs text-gray-400 w-6 shrink-0">#{mov.id}</span>
-                    <span className="text-xs text-gray-500 w-40 shrink-0">{fmtFecha(mov.fecha)}</span>
-                    <span className="text-sm font-medium text-gray-700 flex-1">
-                      {mov.fundo_origen?.descripcion ?? '—'}
-                      {mov.vehiculo?.placa && (
-                        <span className="ml-2 font-mono text-xs bg-slate-800 text-white px-1.5 py-0.5 rounded">{mov.vehiculo.placa}</span>
-                      )}
-                    </span>
-                    <span className="text-xs text-gray-400 shrink-0">{detalles.length} detalle{detalles.length !== 1 ? 's' : ''}</span>
-                  </button>
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => toggleExpand(mov.id)}
+                      className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left"
+                    >
+                      {isOpen ? <ChevronDown size={14} className="text-gray-400 shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
+                      <span className="text-xs text-gray-400 w-6 shrink-0">#{mov.id}</span>
+                      <span className="text-xs text-gray-500 w-40 shrink-0">{fmtFecha(mov.fecha)}</span>
+                      <span className="text-sm font-medium text-gray-700 flex-1">
+                        {mov.fundo_origen?.descripcion ?? '—'}
+                        {mov.vehiculo?.placa && (
+                          <span className="ml-2 font-mono text-xs bg-slate-800 text-white px-1.5 py-0.5 rounded">{mov.vehiculo.placa}</span>
+                        )}
+                      </span>
+                      <span className="text-xs text-gray-400 shrink-0">{detalles.length} detalle{detalles.length !== 1 ? 's' : ''}</span>
+                    </button>
+                    <button
+                      onClick={() => setQrMov(mov)}
+                      title="Ver QR / Pase de garita"
+                      className="mr-3 p-1.5 text-gray-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
+                    >
+                      <QrCode size={16} />
+                    </button>
+                  </div>
 
                   {/* Detalles expandidos */}
                   {isOpen && (
@@ -449,6 +597,8 @@ export default function MovimientoPage() {
           </div>
         )}
       </div>
+
+      {qrMov && <ModalQR mov={qrMov} onClose={() => setQrMov(null)} />}
 
       {selected && (
         <ModalDetalle
