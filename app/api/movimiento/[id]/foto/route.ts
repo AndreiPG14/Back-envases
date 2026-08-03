@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 const BUCKET = 'registro_mov_materiales';
 
@@ -14,8 +14,10 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
     }
 
+    const admin = getSupabaseAdmin();
+
     // Verificar que el movimiento existe (admin para saltear RLS)
-    const { data: mov, error: movErr } = await supabaseAdmin
+    const { data: mov, error: movErr } = await admin
       .from('movimiento')
       .select('id')
       .eq('id', movId)
@@ -45,13 +47,12 @@ export async function POST(
     const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
     const path = `mov_${movId}_${Date.now()}.${ext}`;
 
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    console.log('[foto] Subiendo a bucket:', BUCKET, 'path:', path, 'bytes:', buffer.length);
+    console.log('[foto] Subiendo a bucket:', BUCKET, 'path:', path, 'size:', file.size);
 
-    const { error: uploadErr } = await supabaseAdmin.storage
+    // Pasar el File/Blob directamente — evita la conversión a Buffer que falla con btoa()
+    const { error: uploadErr } = await admin.storage
       .from(BUCKET)
-      .upload(path, buffer, {
+      .upload(path, file, {
         contentType: file.type || 'image/jpeg',
         upsert: true,
       });
@@ -62,10 +63,10 @@ export async function POST(
     }
     console.log('[foto] Upload exitoso → path:', path);
 
-    const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    const { data: urlData } = admin.storage.from(BUCKET).getPublicUrl(path);
     const publicUrl = urlData.publicUrl;
 
-    const { error: updateErr } = await supabaseAdmin
+    const { error: updateErr } = await admin
       .from('movimiento')
       .update({ foto_url: publicUrl })
       .eq('id', movId);
