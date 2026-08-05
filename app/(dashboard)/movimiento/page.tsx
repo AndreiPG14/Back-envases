@@ -309,7 +309,7 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
                 detalleId={detalle.id}
                 fotoEnvio={detalle.foto_url}
                 fotoRecepcion={detalle.foto_recepcion_url}
-                onFotoRecepcionUploaded={(url) => onDetalleUpdated({ ...detalle, foto_recepcion_url: url })}
+                onFotoRecepcionUploaded={(url) => onDetalleUpdated?.({ ...detalle, foto_recepcion_url: url })}
               />
             </>
           )}
