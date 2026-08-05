@@ -8,7 +8,7 @@ export async function POST(
 ) {
   try {
     const { detalleId } = await params;
-    const { cantidad_confirmada } = await request.json();
+    const { cantidad_confirmada, observaciones } = await request.json();
 
     if (cantidad_confirmada === undefined || cantidad_confirmada === null) {
       return NextResponse.json({ success: false, error: 'cantidad_confirmada es requerida' }, { status: 400 });
@@ -36,7 +36,12 @@ export async function POST(
 
     const { data: updated, error: updErr } = await supabase
       .from('movimiento_detalle')
-      .update({ estado, cantidad_confirmada: cantConf, merma })
+      .update({
+        estado,
+        cantidad_confirmada: cantConf,
+        merma,
+        ...(observaciones ? { observaciones } : {}),
+      })
       .eq('id', detalleId)
       .select().single();
     if (updErr) throw updErr;

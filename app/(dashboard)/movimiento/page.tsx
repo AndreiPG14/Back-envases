@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode } from 'lucide-react';
+import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode, FileSpreadsheet } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
+import * as XLSX from 'xlsx';
 
 // ── Modal QR ──────────────────────────────────────────────────────────────────
 function ModalQR({ mov, onClose }: { mov: any; onClose: () => void }) {
@@ -293,6 +294,14 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
             </div>
           )}
 
+          {/* Observaciones de recepción */}
+          {detalle.observaciones && (
+            <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wide mb-1">Observación</p>
+              <p className="text-sm text-amber-900">{detalle.observaciones}</p>
+            </div>
+          )}
+
           {/* Foto del material (por detalle) */}
           {detalle.foto_url && (
             <>
@@ -470,9 +479,77 @@ export default function MovimientoPage() {
     ? new Date(v).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Lima' })
     : '—';
 
+  const exportExcel = () => {
+    const rows: object[] = [];
+
+    data.forEach((mov) => {
+      const detalles: any[] = mov.movimiento_detalle ?? [];
+      detalles.forEach((d) => {
+        const tipo = d.operacion?.descripcion?.toUpperCase() ?? '';
+        rows.push({
+          'ID Movimiento':    mov.id,
+          'Fecha':            fmtFecha(mov.fecha),
+          'Hora':             fmtHora(d.created_at),
+          'Tipo':             d.operacion?.descripcion ?? '—',
+          'Material':         d.material?.descripcion ?? '—',
+          'UM':               d.material?.um ?? '',
+          'Cantidad enviada': Number(d.cantidad) || 0,
+          'Cant. confirmada': d.cantidad_confirmada != null ? Number(d.cantidad_confirmada) : '',
+          'Merma':            d.merma != null ? Number(d.merma) : '',
+          'Ubic. Origen':     mov.fundo_origen?.descripcion ?? '—',
+          'Ubic. Destino':    tipo === 'TRASLADO' ? (d.fundo_destino?.descripcion ?? '—') : '',
+          'Vehículo':         mov.vehiculo?.placa ?? '',
+          'Precinto':         mov.precinto ?? '',
+          'Estado':           d.estado ?? '',
+          'Observaciones':    d.observaciones ?? '',
+        });
+      });
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 14 }, // ID Movimiento
+      { wch: 14 }, // Fecha
+      { wch: 10 }, // Hora
+      { wch: 10 }, // Tipo
+      { wch: 28 }, // Material
+      { wch: 6  }, // UM
+      { wch: 16 }, // Cantidad enviada
+      { wch: 16 }, // Cant. confirmada
+      { wch: 8  }, // Merma
+      { wch: 20 }, // Ubic. Origen
+      { wch: 20 }, // Ubic. Destino
+      { wch: 10 }, // Vehículo
+      { wch: 12 }, // Precinto
+      { wch: 12 }, // Estado
+      { wch: 30 }, // Observaciones
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Movimientos');
+
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `movimientos_${fecha}.xlsx`);
+  };
+
   return (
     <div className="space-y-5">
-      <PageHeader icon={<ArrowLeftRight size={20} />} title="Movimientos" subtitle="Historial de movimientos de inventario" count={data.length} />
+      <PageHeader
+        icon={<ArrowLeftRight size={20} />}
+        title="Movimientos"
+        subtitle="Historial de movimientos de inventario"
+        count={data.length}
+        action={
+          <button
+            onClick={exportExcel}
+            disabled={loading || data.length === 0}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+          >
+            <FileSpreadsheet size={14} />
+            Exportar Excel
+          </button>
+        }
+      />
 
       {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
 

@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, Plus, Pencil, Trash2, X, Loader2, ChevronDown } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
 
 const UMS = ['und', 'kg', 'ha', 't'];
 import PageHeader from '../../components/PageHeader';
 import SearchInput from '../../components/SearchInput';
+
+interface TipoMaterial { id: number; descripcion: string; }
 
 interface Material {
   id: number;
@@ -13,10 +15,15 @@ interface Material {
   cod: string | null;
   um: string | null;
   pu: number | null;
+  id_envase_secundario: number | null;
+  cant_jarras: number;
+  envase_secundario?: { id: number; descripcion: string; um: string | null } | null;
+  tipos?: TipoMaterial[];
 }
 
 export default function MaterialesPage() {
   const [data, setData]           = useState<Material[]>([]);
+  const [tipos, setTipos]         = useState<TipoMaterial[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
   const [error, setError]         = useState('');
@@ -26,10 +33,12 @@ export default function MaterialesPage() {
 
   const fetchData = () => {
     setLoading(true);
-    fetch('/api/materiales')
-      .then((r) => r.json())
-      .then((res) => { setData(res.data ?? []); setError(''); })
-      .catch(() => setError('Error al cargar materiales'))
+    Promise.all([
+      fetch('/api/materiales').then((r) => r.json()),
+      fetch('/api/tipo-material').then((r) => r.json()),
+    ])
+      .then(([mat, tip]) => { setData(mat.data ?? []); setTipos(tip.data ?? []); setError(''); })
+      .catch(() => setError('Error al cargar datos'))
       .finally(() => setLoading(false));
   };
 
@@ -74,9 +83,7 @@ export default function MaterialesPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <Loader2 size={28} className="animate-spin text-emerald-500" />
-          </div>
+          <div className="flex justify-center items-center py-20"><Loader2 size={28} className="animate-spin text-emerald-500" /></div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2 text-gray-400">
             <div className="text-3xl">📦</div>
@@ -86,7 +93,7 @@ export default function MaterialesPage() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/80">
-                {['ID', 'Código', 'Descripción', 'U.M.', 'Precio Unit.', ''].map((h) => (
+                {['ID', 'Código', 'Descripción', 'Tipos', 'U.M.', ''].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -101,23 +108,26 @@ export default function MaterialesPage() {
                       : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-5 py-3.5 font-medium text-gray-700">{m.descripcion}</td>
-                  <td className="px-5 py-3.5 text-gray-500">{m.um ?? <span className="text-gray-300">—</span>}</td>
-                  <td className="px-5 py-3.5 text-gray-600">
-                    {m.pu != null ? `S/ ${Number(m.pu).toFixed(2)}` : <span className="text-gray-300">—</span>}
+                  <td className="px-5 py-3.5">
+                    <div className="flex flex-wrap gap-1">
+                      {(m.tipos ?? []).length > 0
+                        ? (m.tipos ?? []).map((t) => (
+                            <span key={t.id} className="text-xs bg-blue-50 text-blue-700 ring-1 ring-blue-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
+                              {t.descripcion}
+                            </span>
+                          ))
+                        : <span className="text-gray-300 text-xs">—</span>}
+                    </div>
                   </td>
+                  <td className="px-5 py-3.5 text-gray-500">{m.um ?? <span className="text-gray-300">—</span>}</td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => { setSelected(m); setShowModal(true); }}
-                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
+                      <button onClick={() => { setSelected(m); setShowModal(true); }}
+                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">
                         <Pencil size={14} />
                       </button>
-                      <button
-                        onClick={() => handleDelete(m.id)}
-                        disabled={deleting === m.id}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
-                      >
+                      <button onClick={() => handleDelete(m.id)} disabled={deleting === m.id}
+                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40">
                         {deleting === m.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
                       </button>
                     </div>
@@ -132,6 +142,7 @@ export default function MaterialesPage() {
       {showModal && (
         <ModalMaterial
           material={selected}
+          tipos={tipos}
           onClose={() => setShowModal(false)}
           onSaved={() => { setShowModal(false); fetchData(); }}
         />
@@ -140,63 +151,68 @@ export default function MaterialesPage() {
   );
 }
 
+// ── Modal ──────────────────────────────────────────────────────────
+
 function ModalMaterial({
-  material,
-  onClose,
-  onSaved,
+  material, onClose, onSaved, tipos,
 }: {
   material: Material | null;
   onClose: () => void;
   onSaved: () => void;
+  tipos: TipoMaterial[];
 }) {
   const isEdit = material !== null;
+
   const [form, setForm] = useState({
     descripcion: material?.descripcion ?? '',
-    cod:         material?.cod         ?? '',
-    um:          material?.um          ?? '',
+    cod:         material?.cod ?? '',
+    um:          material?.um ?? '',
     pu:          material?.pu != null ? String(material.pu) : '',
   });
-  const [saving, setSaving]     = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
+
+  const [selectedTipos, setSelectedTipos] = useState<Set<number>>(
+    new Set((material?.tipos ?? []).map((t) => t.id))
+  );
+  const [saving, setSaving]   = useState(false);
+  const [errorMsg, setError]  = useState('');
 
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  const toggleTipo = (id: number) =>
+    setSelectedTipos((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.descripcion.trim()) { setErrorMsg('La descripción es requerida'); return; }
-
-    setSaving(true);
-    setErrorMsg('');
+    if (!form.descripcion.trim()) { setError('La descripción es requerida'); return; }
+    setSaving(true); setError('');
 
     const payload = {
       descripcion: form.descripcion.trim(),
-      cod: form.cod.trim()  || null,
-      um:  form.um.trim()   || null,
-      pu:  form.pu !== '' ? Number(form.pu) : null,
+      cod:         form.cod.trim() || null,
+      um:          form.um.trim() || null,
+      pu:          form.pu !== '' ? Number(form.pu) : null,
+      id_tipos:    Array.from(selectedTipos),
     };
 
-    const url    = isEdit ? `/api/materiales/${material!.id}` : '/api/materiales';
-    const method = isEdit ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }).then((r) => r.json());
+    const res = await fetch(
+      isEdit ? `/api/materiales/${material!.id}` : '/api/materiales',
+      { method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+    ).then((r) => r.json());
 
     setSaving(false);
     if (res.success) onSaved();
-    else setErrorMsg(res.error ?? 'Error al guardar');
+    else setError(res.error ?? 'Error al guardar');
   };
 
   const inputCls = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500';
   const labelCls = 'block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
               <Package size={16} className="text-emerald-600" />
@@ -208,29 +224,61 @@ function ModalMaterial({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {/* Body scrollable */}
+        <form onSubmit={handleSubmit} className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+
           {/* Descripción */}
           <div>
             <label className={labelCls}>Descripción <span className="text-red-400">*</span></label>
             <input type="text" value={form.descripcion} onChange={set('descripcion')}
-              placeholder="Ej: Jarras, Cemento..." className={inputCls} />
+              placeholder="Ej: Bandeja Verde Perú..." className={inputCls} />
+          </div>
+
+          {/* Tipos asociados — selección interactiva */}
+          <div>
+            <label className={labelCls}>
+              Tipos asignados <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            {tipos.length === 0 ? (
+              <p className="text-xs text-gray-400">
+                No hay tipos creados.{' '}
+                <a href="/tipo-material" target="_blank" className="text-blue-500 underline">Crear tipos</a>
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 mt-1">
+                {tipos.map((t) => {
+                  const active = selectedTipos.has(t.id);
+                  return (
+                    <button
+                      key={t.id} type="button"
+                      onClick={() => toggleTipo(t.id)}
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium border transition-colors ${
+                        active
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'bg-white border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
+                      }`}
+                    >
+                      {t.descripcion}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Código */}
           <div>
             <label className={labelCls}>Código <span className="text-gray-400 font-normal">(opcional)</span></label>
             <input type="text" value={form.cod} onChange={set('cod')}
-              placeholder="Ej: MAT-001" className={inputCls} />
+              placeholder="Ej: BVP" className={inputCls} />
           </div>
 
-          {/* Unidad de medida — selector */}
+          {/* UM */}
           <div>
             <label className={labelCls}>Unidad de medida</label>
             <div className="flex gap-2">
               {UMS.map((u) => (
-                <button
-                  key={u}
-                  type="button"
+                <button key={u} type="button"
                   onClick={() => setForm((f) => ({ ...f, um: u }))}
                   className={`flex-1 py-2 text-sm font-semibold rounded-lg border-2 transition-colors ${
                     form.um === u

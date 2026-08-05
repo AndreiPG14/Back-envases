@@ -5,13 +5,14 @@ import { usePathname } from 'next/navigation';
 import {
   Package, Truck, Wheat, Building2, Settings2,
   ShieldCheck, UserCircle, ArrowLeftRight,
-  Warehouse, ChevronRight, PackagePlus, LayoutGrid,
+  Warehouse, ChevronRight, PackagePlus, LayoutGrid, Layers,
 } from 'lucide-react';
 
 const groups = [
   {
     label: 'Maestros',
     items: [
+      { href: '/tipo-material', label: 'Tipos',         icon: Layers      },
       { href: '/materiales',   label: 'Materiales',   icon: Package     },
       { href: '/vehiculo',     label: 'Vehículos',    icon: Truck       },
       { href: '/fundo',        label: 'Ubicaciones',  icon: Wheat       },
