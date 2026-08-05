@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('tipo_material')
-      .insert([{ descripcion: body.descripcion.trim() }])
+      .insert([{ descripcion: body.descripcion.trim(), cod: body.cod?.trim() || null }])
       .select().single();
     if (error) throw error;
     return NextResponse.json({ success: true, data } as ApiResponse<any>, { status: 201 });

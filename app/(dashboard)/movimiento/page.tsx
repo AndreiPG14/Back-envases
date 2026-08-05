@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode, FileSpreadsheet } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode, FileSpreadsheet, Upload, PackageCheck, Inbox, Camera } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import * as XLSX from 'xlsx';
 
@@ -127,7 +127,6 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
   const [observacion, setObs]     = useState('');
   const [saving, setSaving]       = useState(false);
   const [err, setErr]             = useState('');
-  const [fotoAmpliada, setFotoAmpliada] = useState(false);
 
   const tipo       = detalle.operacion?.descripcion?.toUpperCase();
   const esTraslado = tipo === 'TRASLADO';
@@ -194,9 +193,9 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]">
         {/* header */}
-        <div className={`px-6 py-4 flex items-center justify-between ${esTraslado ? 'bg-indigo-600' : 'bg-red-500'}`}>
+        <div className={`px-6 py-4 flex items-center justify-between flex-shrink-0 ${esTraslado ? 'bg-indigo-600' : 'bg-red-500'}`}>
           <div className="flex items-center gap-2 text-white">
             {esTraslado ? <ArrowLeftRight size={18} /> : <TrendingDown size={18} />}
             <span className="font-semibold">{detalle.operacion?.descripcion ?? tipo}</span>
@@ -215,7 +214,7 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
+        <div className="px-6 py-5 space-y-5 overflow-y-auto">
           {/* estado */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-500">Estado</span>
@@ -302,44 +301,16 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
             </div>
           )}
 
-          {/* Foto del material (por detalle) */}
-          {detalle.foto_url && (
+          {/* Fotos desplegables */}
+          {(detalle.foto_url || detalle.foto_recepcion_url || detalle.estado === 'COMPLETO' || detalle.estado === 'PARCIAL') && (
             <>
               <hr className="border-gray-100" />
-              <div>
-                <p className="text-xs text-gray-400 mb-2">Foto del material</p>
-                <div className="relative group cursor-zoom-in" onClick={() => setFotoAmpliada(true)}>
-                  <img
-                    src={detalle.foto_url}
-                    alt="Foto del material"
-                    className="w-full rounded-xl object-cover max-h-56"
-                  />
-                  <div className="absolute inset-0 rounded-xl bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
-                      Ver ampliada
-                    </span>
-                  </div>
-                </div>
-              </div>
-              {fotoAmpliada && (
-                <div
-                  className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
-                  onClick={() => setFotoAmpliada(false)}
-                >
-                  <button
-                    className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
-                    onClick={() => setFotoAmpliada(false)}
-                  >
-                    <X size={28} />
-                  </button>
-                  <img
-                    src={detalle.foto_url}
-                    alt="Foto del material"
-                    className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </div>
-              )}
+              <FotosDetalle
+                detalleId={detalle.id}
+                fotoEnvio={detalle.foto_url}
+                fotoRecepcion={detalle.foto_recepcion_url}
+                onFotoRecepcionUploaded={(url) => onDetalleUpdated({ ...detalle, foto_recepcion_url: url })}
+              />
             </>
           )}
 
@@ -573,7 +544,7 @@ export default function MovimientoPage() {
           <div className="flex justify-center items-center py-20 text-gray-400 text-sm">Cargando...</div>
         ) : data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-2">
-            <div className="text-3xl">📭</div>
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin movimientos registrados</p>
           </div>
         ) : (
@@ -662,7 +633,7 @@ export default function MovimientoPage() {
                                   </td>
                                   <td className="px-3 py-2.5 text-center">
                                     {d.foto_url && (
-                                      <span title="Tiene foto" className="text-indigo-400">📷</span>
+                                      <span title="Tiene foto" className="text-indigo-400 flex justify-center"><Camera size={14} /></span>
                                     )}
                                   </td>
                                 </tr>
@@ -697,5 +668,107 @@ export default function MovimientoPage() {
       )}
 
     </div>
+  );
+}
+
+// ── Fotos desplegables ──────────────────────────────────────────────────────
+function FotosDetalle({
+  detalleId, fotoEnvio, fotoRecepcion, onFotoRecepcionUploaded,
+}: {
+  detalleId: number;
+  fotoEnvio?: string;
+  fotoRecepcion?: string;
+  onFotoRecepcionUploaded?: (url: string) => void;
+}) {
+  const [openEnvio, setOpenEnvio]           = useState(false);
+  const [openRecepcion, setOpenRecepcion]   = useState(false);
+  const [ampliada, setAmpliada]             = useState<string | null>(null);
+  const [uploading, setUploading]           = useState(false);
+  const [uploadError, setUploadError]       = useState('');
+  const [localRecepcion, setLocalRecepcion] = useState(fotoRecepcion);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    setUploadError('');
+    const fd = new FormData();
+    fd.append('foto', file);
+    try {
+      const res = await fetch(`/api/movimiento_detalle/${detalleId}/foto-recepcion`, { method: 'POST', body: fd });
+      const json = await res.json();
+      if (json.success) {
+        setLocalRecepcion(json.data.foto_recepcion_url);
+        setOpenRecepcion(true);
+        onFotoRecepcionUploaded?.(json.data.foto_recepcion_url);
+      } else {
+        setUploadError(json.error ?? 'Error al subir foto');
+      }
+    } catch {
+      setUploadError('Error de conexión');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const FotoRow = ({ label, url, icon, open, setOpen }: {
+    label: string; url: string; icon: React.ReactNode; open: boolean; setOpen: (v: boolean) => void;
+  }) => (
+    <div className="border border-gray-100 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+      >
+        <span className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          {icon} {label}
+        </span>
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="relative group cursor-zoom-in p-2" onClick={() => setAmpliada(url)}>
+          <img src={url} alt={label} className="w-full rounded-lg object-cover max-h-52" />
+          <div className="absolute inset-2 rounded-lg bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 text-white text-xs px-2 py-1 rounded-lg">Ver ampliada</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <div className="space-y-2">
+        {fotoEnvio && <FotoRow label="Foto de envío" url={fotoEnvio} icon={<Upload size={11} />} open={openEnvio} setOpen={setOpenEnvio} />}
+
+        {localRecepcion
+          ? <FotoRow label="Foto de recepción" url={localRecepcion} icon={<PackageCheck size={11} />} open={openRecepcion} setOpen={setOpenRecepcion} />
+          : (
+            <div className="border border-dashed border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-gray-50 flex items-center gap-2">
+                <PackageCheck size={11} className="text-gray-400" />
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Foto de recepción</span>
+              </div>
+              <div className="p-3">
+                <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
+                <button
+                  onClick={() => inputRef.current?.click()}
+                  disabled={uploading}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 text-sm text-gray-500 hover:text-emerald-600 border border-gray-200 hover:border-emerald-300 rounded-lg hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                >
+                  {uploading ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+                  {uploading ? 'Subiendo...' : 'Adjuntar foto de recepción'}
+                </button>
+                {uploadError && <p className="text-xs text-red-500 mt-1.5 text-center">{uploadError}</p>}
+              </div>
+            </div>
+          )
+        }
+      </div>
+      {ampliada && (
+        <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-4" onClick={() => setAmpliada(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors" onClick={() => setAmpliada(null)}><X size={28} /></button>
+          <img src={ampliada} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+    </>
   );
 }

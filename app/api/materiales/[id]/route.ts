@@ -6,7 +6,7 @@ import { validarRequeridos, validarMaxLength, validarNumeroPositivo, formatearEr
 async function getMaterialFull(id: string | number) {
   const { data } = await supabase
     .from('materiales')
-    .select('*, envase_secundario:id_envase_secundario(id, descripcion, um), material_tipo(tipo:id_tipo(id, descripcion))')
+    .select('*, envase_secundario:id_envase_secundario(id, descripcion, um), material_tipo(tipo:id_tipo(id, cod, descripcion))')
     .eq('id', id)
     .single();
   if (!data) return null;

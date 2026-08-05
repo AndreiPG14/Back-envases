@@ -10,7 +10,7 @@ export async function GET() {
       .select(`
         *,
         envase_secundario:id_envase_secundario(id, descripcion, um),
-        material_tipo(tipo:id_tipo(id, descripcion))
+        material_tipo(tipo:id_tipo(id, cod, descripcion))
       `)
       .order('descripcion');
     if (error) throw error;
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     const { data: full } = await supabase
       .from('materiales')
-      .select('*, envase_secundario:id_envase_secundario(id, descripcion, um), material_tipo(tipo:id_tipo(id, descripcion))')
+      .select('*, envase_secundario:id_envase_secundario(id, descripcion, um), material_tipo(tipo:id_tipo(id, cod, descripcion))')
       .eq('id', data.id).single();
 
     return NextResponse.json({

@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Layers, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
+import { Layers, Plus, Pencil, Trash2, X, Loader2, Inbox } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import SearchInput from '../../components/SearchInput';
 
-interface Tipo { id: number; descripcion: string; created_at: string; }
+interface Tipo { id: number; cod: string | null; descripcion: string; created_at: string; }
 
 export default function TipoMaterialPage() {
   const [data, setData]           = useState<Tipo[]>([]);
@@ -70,14 +70,14 @@ export default function TipoMaterialPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <div className="text-3xl">🗂️</div>
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin tipos registrados</p>
           </div>
         ) : (
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/80">
-                {['ID', 'Descripción', 'Creado', ''].map((h) => (
+                {['ID', 'Código', 'Descripción', 'Creado', ''].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -86,6 +86,11 @@ export default function TipoMaterialPage() {
               {filtered.map((t) => (
                 <tr key={t.id} className="hover:bg-emerald-50/40 transition-colors">
                   <td className="px-5 py-3.5 text-gray-400 text-xs">{t.id}</td>
+                  <td className="px-5 py-3.5">
+                    {t.cod
+                      ? <span className="font-mono text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{t.cod}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
                   <td className="px-5 py-3.5">
                     <span className="inline-flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-blue-400" />
@@ -128,6 +133,7 @@ export default function TipoMaterialPage() {
 function ModalTipo({ tipo, onClose, onSaved }: { tipo: Tipo | null; onClose: () => void; onSaved: () => void; }) {
   const isEdit = tipo !== null;
   const [descripcion, setDescripcion] = useState(tipo?.descripcion ?? '');
+  const [cod, setCod]                 = useState(tipo?.cod ?? '');
   const [saving, setSaving]           = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
 
@@ -140,7 +146,7 @@ function ModalTipo({ tipo, onClose, onSaved }: { tipo: Tipo | null; onClose: () 
     const res = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ descripcion: descripcion.trim() }),
+      body: JSON.stringify({ descripcion: descripcion.trim(), cod: cod.trim() || null }),
     }).then((r) => r.json());
     setSaving(false);
     if (res.success) onSaved();
@@ -164,10 +170,18 @@ function ModalTipo({ tipo, onClose, onSaved }: { tipo: Tipo | null; onClose: () 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+              Código
+            </label>
+            <input type="text" value={cod} onChange={(e) => setCod(e.target.value)}
+              placeholder="Ej: BVP, JVP, BBPH..." autoFocus
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
               Descripción <span className="text-red-400">*</span>
             </label>
             <input type="text" value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
-              placeholder="Ej: BVP, JARRA REDONDA, BABUL..." autoFocus
+              placeholder="Ej: Bidón Verde Pequeño..."
               className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500" />
           </div>
           {errorMsg && <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm">{errorMsg}</div>}

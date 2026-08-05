@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UserCircle, Plus, Trash2, X, Search, Loader2, ChevronDown, Pencil } from 'lucide-react';
+import { UserCircle, Plus, Trash2, X, Search, Loader2, ChevronDown, Pencil, Inbox, Eye, EyeOff } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 
 interface Rol       { id: number; descripcion: string }
@@ -86,7 +86,7 @@ export default function UsuarioPage() {
           </div>
         ) : data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-2">
-            <div className="text-3xl">📭</div>
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin usuarios registrados</p>
           </div>
         ) : (
@@ -293,7 +293,7 @@ function ModalEditarUsuario({
                 onClick={() => setShowPass(!showPass)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                {showPass ? '🙈' : '👁️'}
+                {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
           </div>
@@ -481,7 +481,7 @@ function ModalCrearUsuario({
                 onClick={() => setShowPass(!showPass)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                {showPass ? '🙈' : '👁️'}
+                {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
           </div>

@@ -35,20 +35,30 @@ export default function AlertasMerma() {
         { event: 'UPDATE', schema: 'public', table: 'movimiento_detalle' },
         (payload) => {
           const row = payload.new as any;
-          if ((row.merma ?? 0) > 0) {
-            // Traer detalle completo con joins
-            fetch(`/api/movimiento_detalle?idmovimiento=${row.idmovimiento}&conMerma=1`)
-              .then((r) => r.json())
-              .then((res) => {
-                const nuevosDetalles: any[] = res.data ?? [];
-                setAlertas((prev) => {
-                  const ids = new Set(prev.map((a) => a.id));
-                  const agregados = nuevosDetalles.filter((d) => !ids.has(d.id));
-                  if (agregados.length > 0) setNuevas((n) => n + agregados.length);
-                  return [...agregados, ...prev];
-                });
-              });
+          if ((row.merma ?? 0) === 0) {
+            // Sin merma — quitar de la lista si estaba
+            setAlertas((prev) => prev.filter((a) => a.id !== row.id));
+            return;
           }
+          // Con merma — traer detalle completo con joins y actualizar/agregar
+          fetch(`/api/movimiento_detalle?idmovimiento=${row.idmovimiento}&conMerma=1`)
+            .then((r) => r.json())
+            .then((res) => {
+              const nuevosDetalles: any[] = res.data ?? [];
+              setAlertas((prev) => {
+                const prevIds = new Set(prev.map((a) => a.id));
+                const agregados = nuevosDetalles.filter((d) => !prevIds.has(d.id));
+                if (agregados.length > 0) setNuevas((n) => n + agregados.length);
+                // Actualizar existentes y agregar nuevos
+                return [
+                  ...agregados,
+                  ...prev.map((a) => {
+                    const updated = nuevosDetalles.find((d) => d.id === a.id);
+                    return updated ?? a;
+                  }),
+                ];
+              });
+            });
         }
       )
       .subscribe();

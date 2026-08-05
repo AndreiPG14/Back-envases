@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, X, Loader2, Inbox } from 'lucide-react';
 
 const UMS = ['und', 'kg', 'ha', 't'];
 import PageHeader from '../../components/PageHeader';
@@ -86,7 +86,7 @@ export default function MaterialesPage() {
           <div className="flex justify-center items-center py-20"><Loader2 size={28} className="animate-spin text-emerald-500" /></div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2 text-gray-400">
-            <div className="text-3xl">📦</div>
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin materiales registrados</p>
           </div>
         ) : (
@@ -113,7 +113,7 @@ export default function MaterialesPage() {
                       {(m.tipos ?? []).length > 0
                         ? (m.tipos ?? []).map((t) => (
                             <span key={t.id} className="text-xs bg-blue-50 text-blue-700 ring-1 ring-blue-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">
-                              {t.descripcion}
+                              {t.cod ?? t.descripcion}
                             </span>
                           ))
                         : <span className="text-gray-300 text-xs">—</span>}
@@ -258,7 +258,7 @@ function ModalMaterial({
                           : 'bg-white border-gray-200 text-gray-500 hover:border-blue-400 hover:text-blue-600'
                       }`}
                     >
-                      {t.descripcion}
+                      {t.cod ?? t.descripcion}
                     </button>
                   );
                 })}

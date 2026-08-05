@@ -15,7 +15,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ success: false, error: 'Ya existe un tipo con esa descripción' }, { status: 409 });
 
     const { data, error } = await supabase
-      .from('tipo_material').update({ descripcion: body.descripcion.trim() }).eq('id', id).select().single();
+      .from('tipo_material').update({ descripcion: body.descripcion.trim(), cod: body.cod?.trim() || null }).eq('id', id).select().single();
     if (error) throw error;
     return NextResponse.json({ success: true, data } as ApiResponse<any>);
   } catch (error: any) {

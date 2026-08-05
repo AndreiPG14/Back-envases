@@ -1,6 +1,6 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
+import { Loader2, Inbox } from 'lucide-react';
 
 interface Column {
   key: string;
@@ -28,7 +28,7 @@ export default function DataTable({ columns, data, loading, emptyMessage = 'Sin 
   if (data.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-gray-400 gap-2">
-        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-2xl">📭</div>
+        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
         <span className="text-sm font-medium text-gray-500">{emptyMessage}</span>
         <span className="text-xs text-gray-400">No hay registros para mostrar</span>
       </div>

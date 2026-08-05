@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { PackagePlus, Plus, X, Loader2, Calendar, ChevronDown } from 'lucide-react';
+import { PackagePlus, Plus, X, Loader2, Calendar, ChevronDown, Inbox } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 
 interface Material { id: number; descripcion: string; um: string }
@@ -66,7 +66,7 @@ export default function IngresoPage() {
           </div>
         ) : data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <div className="text-3xl">📦</div>
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin ingresos registrados</p>
           </div>
         ) : (

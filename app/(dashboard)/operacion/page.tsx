@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Zap, Plus, Pencil, Trash2, X, Loader2 } from 'lucide-react';
+import { Zap, Plus, Pencil, Trash2, X, Loader2, Inbox } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 
 interface Operacion { id: number; descripcion: string }
@@ -59,7 +59,7 @@ export default function OperacionPage() {
           </div>
         ) : data.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
-            <div className="text-3xl">⚙️</div>
+            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin operaciones registradas</p>
           </div>
         ) : (
