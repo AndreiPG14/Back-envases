@@ -168,8 +168,8 @@ export default function InventarioPage() {
 
   // ── Totales para chips ────────────────────────────────────────────
   const counts = useMemo(() => {
-    const c = { normal: 0, bajo: 0, critico: 0, agotado: 0, total: data.length };
-    data.forEach((sf) => c[getEstado(sf.stock)]++);
+    const c: Record<string, number> = { normal: 0, bajo: 0, critico: 0, agotado: 0, total: data.length };
+    data.forEach((sf) => { const e = getEstado(sf.stock); c[e] = (c[e] ?? 0) + 1; });
     return c;
   }, [data]);
 
