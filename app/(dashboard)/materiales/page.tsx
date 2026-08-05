@@ -7,7 +7,7 @@ const UMS = ['und', 'kg', 'ha', 't'];
 import PageHeader from '../../components/PageHeader';
 import SearchInput from '../../components/SearchInput';
 
-interface TipoMaterial { id: number; descripcion: string; }
+interface TipoMaterial { id: number; cod?: string | null; descripcion: string; }
 
 interface Material {
   id: number;
