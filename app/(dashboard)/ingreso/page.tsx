@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRealtimeRefresh } from '@/lib/useRealtimeRefresh';
 import { PackagePlus, Plus, X, Loader2, Calendar, ChevronDown, Inbox } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 
@@ -24,16 +25,18 @@ export default function IngresoPage() {
   const [error, setError]       = useState('');
   const [showModal, setShowModal] = useState(false);
 
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     setLoading(true);
     fetch('/api/ingreso')
       .then((r) => r.json())
       .then((res) => { setData(res.data ?? []); setError(''); })
       .catch(() => setError('Error al cargar ingresos'))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  useRealtimeRefresh(['ingreso'], fetchData, 'ingreso-page');
 
   const fmt = (fechaStr: string) => {
     const d = new Date(fechaStr);

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useRealtimeRefresh } from '@/lib/useRealtimeRefresh';
 import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode, FileSpreadsheet, Upload, PackageCheck, Inbox, Camera } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import * as XLSX from 'xlsx';
@@ -418,17 +419,20 @@ export default function MovimientoPage() {
   const [selected, setSelected]   = useState<{ detalle: any; mov: any } | null>(null);
   const [qrMov, setQrMov]         = useState<any | null>(null);
 
-  useEffect(() => {
+  const fetchMovimientos = useCallback(() => {
     fetch('/api/movimiento')
       .then((r) => r.json())
       .then((res) => {
-        // Filtrar cabeceras huérfanas (sin detalles)
         const all = res.data ?? [];
         setData(all.filter((m: any) => (m.movimiento_detalle?.length ?? 0) > 0));
       })
       .catch(() => setError('Error al cargar movimientos'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { fetchMovimientos(); }, [fetchMovimientos]);
+
+  useRealtimeRefresh(['movimiento', 'movimiento_detalle'], fetchMovimientos, 'movimiento-page');
 
   const toggleExpand = (id: number) => {
     setExpanded((prev) => {
