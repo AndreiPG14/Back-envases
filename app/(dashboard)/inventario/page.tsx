@@ -16,6 +16,13 @@ interface StockFundo {
   fundo?: { id: number; descripcion: string };
 }
 
+interface MermaFundoItem {
+  idmaterial: number;
+  idfundo: number;
+  total_merma: number;
+  observaciones: string[];
+}
+
 interface FundoGroup {
   id: number;
   descripcion: string;
@@ -56,6 +63,7 @@ const ESTADO_TEXT: Record<string, string> = {
 
 export default function InventarioPage() {
   const [data, setData]         = useState<StockFundo[]>([]);
+  const [mermaData, setMermaData] = useState<MermaFundoItem[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
   const [query, setQuery]       = useState('');
@@ -90,12 +98,15 @@ export default function InventarioPage() {
           .sort((a, b) => Number(b.stock) - Number(a.stock))
           .forEach((sf) => {
             const estado = getEstado(sf.stock);
+            const merma = getMerma(sf.idmaterial, sf.idfundo);
             rows.push({
-              Ubicación:  g.descripcion,
-              Material:   sf.material?.descripcion ?? `Material #${sf.idmaterial}`,
-              UM:         sf.material?.um ?? '',
-              Stock:      Number(sf.stock),
-              Estado:     ESTADO_LABEL[estado],
+              Ubicación:     g.descripcion,
+              Material:      sf.material?.descripcion ?? `Material #${sf.idmaterial}`,
+              UM:            sf.material?.um ?? '',
+              Stock:         Number(sf.stock),
+              Estado:        ESTADO_LABEL[estado],
+              'Merma total': merma?.total_merma ?? 0,
+              Observaciones: merma?.observaciones.join(' / ') ?? '',
             });
           });
       });
@@ -109,6 +120,8 @@ export default function InventarioPage() {
       { wch: 8  }, // UM
       { wch: 12 }, // Stock
       { wch: 10 }, // Estado
+      { wch: 12 }, // Merma total
+      { wch: 40 }, // Observaciones
     ];
 
     const wb = XLSX.utils.book_new();
@@ -120,12 +133,21 @@ export default function InventarioPage() {
 
   const fetchData = () => {
     setLoading(true);
-    fetch('/api/stock-fundo')
-      .then((r) => r.json())
-      .then((res) => { setData(res.data ?? []); setError(''); })
+    Promise.all([
+      fetch('/api/stock-fundo').then((r) => r.json()),
+      fetch('/api/merma-fundo').then((r) => r.json()),
+    ])
+      .then(([stock, merma]) => {
+        setData(stock.data ?? []);
+        setMermaData(merma.data ?? []);
+        setError('');
+      })
       .catch(() => setError('Error al cargar inventario'))
       .finally(() => setLoading(false));
   };
+
+  const getMerma = (idmaterial: number, idfundo: number): MermaFundoItem | undefined =>
+    mermaData.find(m => m.idmaterial === idmaterial && m.idfundo === idfundo);
 
   useEffect(() => { fetchData(); }, []);
 
@@ -347,6 +369,8 @@ export default function InventarioPage() {
                         <th className="px-5 py-2.5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Material</th>
                         <th className="px-5 py-2.5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">UM</th>
                         <th className="px-5 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Stock</th>
+                        <th className="px-5 py-2.5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Merma</th>
+                        <th className="px-5 py-2.5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Observaciones</th>
                         <th className="px-5 py-2.5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
                       </tr>
                     </thead>
@@ -356,6 +380,7 @@ export default function InventarioPage() {
                         .sort((a, b) => Number(b.stock) - Number(a.stock))
                         .map((sf) => {
                           const estado = getEstado(sf.stock);
+                          const merma  = getMerma(sf.idmaterial, sf.idfundo);
                           return (
                             <tr
                               key={`${sf.idmaterial}-${sf.idfundo}`}
@@ -369,6 +394,24 @@ export default function InventarioPage() {
                               </td>
                               <td className={`px-5 py-3 text-right font-bold text-base ${ESTADO_TEXT[estado]}`}>
                                 {Number(sf.stock).toLocaleString('es-PE')}
+                              </td>
+                              <td className="px-5 py-3 text-right">
+                                {merma && merma.total_merma > 0 ? (
+                                  <span className="font-semibold text-amber-600">
+                                    {merma.total_merma.toLocaleString('es-PE')}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-xs text-gray-500 max-w-xs">
+                                {merma && merma.observaciones.length > 0 ? (
+                                  <span className="italic">
+                                    {merma.observaciones.join(' / ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300">—</span>
+                                )}
                               </td>
                               <td className="px-5 py-3">
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${ESTADO_BADGE[estado]}`}>

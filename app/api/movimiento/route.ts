@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         fundo_origen:idfundoorigen(id, descripcion),
         usuario_origen:idusuarioorigen(id, username),
         movimiento_detalle(
-          id, cantidad, estado, cantidad_confirmada, merma, created_at, foto_url, foto_recepcion_url, observaciones,
+          id, cantidad, estado, cantidad_confirmada, merma, created_at, foto_url, foto_recepcion_url, observaciones, tipo,
           material:idmaterial(id, descripcion, um),
           fundo_destino:idfundodestino(id, descripcion),
           operacion:idoperacion(id, descripcion)

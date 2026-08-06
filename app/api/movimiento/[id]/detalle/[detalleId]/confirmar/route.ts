@@ -8,7 +8,7 @@ export async function POST(
 ) {
   try {
     const { detalleId } = await params;
-    const { cantidad_confirmada, observaciones } = await request.json();
+    const { cantidad_confirmada, observaciones, idusuario, tipo_merma } = await request.json();
 
     if (cantidad_confirmada === undefined || cantidad_confirmada === null) {
       return NextResponse.json({ success: false, error: 'cantidad_confirmada es requerida' }, { status: 400 });
@@ -40,7 +40,10 @@ export async function POST(
         estado,
         cantidad_confirmada: cantConf,
         merma,
-        ...(observaciones ? { observaciones } : {}),
+        fecha_recepcion: new Date().toISOString(),
+        ...(observaciones ? { observaciones }                         : {}),
+        ...(idusuario     ? { idusuariorecepcion: Number(idusuario) } : {}),
+        ...(merma > 0 && tipo_merma ? { tipo_merma }                  : { tipo_merma: null }),
       })
       .eq('id', detalleId)
       .select().single();

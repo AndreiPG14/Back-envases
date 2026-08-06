@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   Package, Truck, Wheat, Building2, Settings2,
   ShieldCheck, UserCircle, ArrowLeftRight,
-  Warehouse, ChevronRight, PackagePlus, LayoutGrid, Layers,
+  Warehouse, ChevronRight, PackagePlus, LayoutGrid, Layers, Navigation,
 } from 'lucide-react';
 
 const groups = [
@@ -27,6 +27,7 @@ const groups = [
     items: [
       { href: '/ingreso',    label: 'Ingresos',    icon: PackagePlus    },
       { href: '/movimiento', label: 'Movimientos', icon: ArrowLeftRight },
+      { href: '/transito',   label: 'Tránsito',    icon: Navigation    },
     ],
   },
   {

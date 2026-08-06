@@ -27,7 +27,7 @@ export async function POST(
     const creados: any[] = [];
 
     for (const d of detalles) {
-      const { idmaterial, idfundoorigen, idoperacion, cantidad, idfundodestino } = d;
+      const { idmaterial, idfundoorigen, idoperacion, cantidad, idfundodestino, tipo } = d;
       if (!idmaterial || !idfundoorigen || !idoperacion || !cantidad)
         return NextResponse.json({ success: false, error: 'Faltan campos requeridos en un detalle' }, { status: 400 });
 
@@ -42,13 +42,15 @@ export async function POST(
       }
 
       // Verificar stock
+      const { data: mat } = await supabase.from('material').select('descripcion').eq('id', idmaterial).single();
+      const matNombre = mat?.descripcion ?? `#${idmaterial}`;
       const { data: sf } = await supabase
         .from('stock_fundo').select('stock').eq('idmaterial', idmaterial).eq('idfundo', idfundoorigen).single();
       const stock = sf?.stock ?? 0;
       if (stock < cant)
         return NextResponse.json({
           success: false,
-          error: `Stock insuficiente para material #${idmaterial}. Disponible: ${stock}, solicitado: ${cant}`,
+          error: `Stock insuficiente para "${matNombre}". Disponible: ${stock}, solicitado: ${cant}`,
         }, { status: 400 });
 
       // Descontar stock
@@ -65,6 +67,7 @@ export async function POST(
           cantidad:            cant,
           idfundodestino:      idfundodestino ?? null,
           idoperacion,
+          tipo:                tipo ?? null,
           estado:              tipoOp === 'TRASLADO' ? 'PENDIENTE' : 'COMPLETO',
           cantidad_confirmada: tipoOp === 'TRASLADO' ? null : cant,
           merma:               0,

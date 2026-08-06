@@ -33,9 +33,53 @@ export async function PUT(
     if (estado) updates.estado = estado;
     if (observaciones !== undefined) updates.observaciones = observaciones;
 
-    if (estado === 'COMPLETO') {
+    if (estado === 'PENDIENTE') {
+      // Revertir stock en destino: quitar lo que ya estaba confirmado
+      if (detalle.idfundodestino && detalle.idmaterial) {
+        const prevConf = Number(detalle.cantidad_confirmada ?? 0);
+        if (prevConf > 0) {
+          const { data: sf } = await supabase
+            .from('stock_fundo')
+            .select('stock')
+            .eq('idmaterial', detalle.idmaterial)
+            .eq('idfundo', detalle.idfundodestino)
+            .single();
+
+          await supabase
+            .from('stock_fundo')
+            .upsert(
+              { idmaterial: detalle.idmaterial, idfundo: detalle.idfundodestino, stock: Math.max(0, (sf?.stock ?? 0) - prevConf) },
+              { onConflict: 'idmaterial,idfundo' }
+            );
+        }
+      }
+      updates.cantidad_confirmada = null;
+      updates.merma = null;
+    } else if (estado === 'COMPLETO') {
       updates.cantidad_confirmada = detalle.cantidad;
       updates.merma = 0;
+
+      // Ajustar stock en destino si había una confirmación previa menor
+      if (detalle.idfundodestino && detalle.idmaterial) {
+        const prevConf = Number(detalle.cantidad_confirmada ?? 0);
+        const diff = Number(detalle.cantidad) - prevConf;
+        if (diff !== 0) {
+          const { data: sf } = await supabase
+            .from('stock_fundo')
+            .select('stock')
+            .eq('idmaterial', detalle.idmaterial)
+            .eq('idfundo', detalle.idfundodestino)
+            .single();
+
+          const stockActual = (sf?.stock ?? 0) + diff;
+          await supabase
+            .from('stock_fundo')
+            .upsert(
+              { idmaterial: detalle.idmaterial, idfundo: detalle.idfundodestino, stock: Math.max(0, stockActual) },
+              { onConflict: 'idmaterial,idfundo' }
+            );
+        }
+      }
     } else if (estado === 'INCOMPLETO') {
       if (cantidad_confirmada === undefined || cantidad_confirmada === null) {
         return NextResponse.json({ success: false, error: 'cantidad_confirmada es requerida para estado INCOMPLETO' }, { status: 400 });

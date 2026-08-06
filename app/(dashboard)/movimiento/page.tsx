@@ -99,7 +99,7 @@ function ModalQR({ mov, onClose }: { mov: any; onClose: () => void }) {
               <div className="space-y-1.5">
                 {detalles.map((d: any, i: number) => (
                   <div key={i} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-700 font-medium">{d.material?.descripcion ?? '—'}</span>
+                    <span className="text-gray-700 font-medium">{d.material?.descripcion ?? '—'}{d.tipo && <span className="ml-1 text-gray-400">— {d.tipo}</span>}</span>
                     <span className="text-gray-500">{d.cantidad} {d.material?.um ?? ''}</span>
                   </div>
                 ))}
@@ -229,7 +229,7 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
             <div>
               <p className="text-xs text-gray-400 mb-0.5">Material</p>
               <p className="font-semibold text-gray-800">
-                {detalle.material?.descripcion ?? '—'}
+                {detalle.material?.descripcion ?? '—'}{detalle.tipo && <span className="ml-1 text-gray-400 font-normal">— {detalle.tipo}</span>}
                 {um && <span className="ml-1 text-gray-400 font-normal">{um}</span>}
               </p>
             </div>
@@ -567,11 +567,12 @@ export default function MovimientoPage() {
                       {isOpen ? <ChevronDown size={14} className="text-gray-400 shrink-0" /> : <ChevronRight size={14} className="text-gray-400 shrink-0" />}
                       <span className="text-xs text-gray-400 w-6 shrink-0">#{mov.id}</span>
                       <span className="text-xs text-gray-500 w-40 shrink-0">{fmtFecha(mov.fecha)}</span>
-                      <span className="text-sm font-medium text-gray-700 flex-1">
-                        {mov.fundo_origen?.descripcion ?? '—'}
-                        {mov.vehiculo?.placa && (
-                          <span className="ml-2 font-mono text-xs bg-slate-800 text-white px-1.5 py-0.5 rounded">{mov.vehiculo.placa}</span>
-                        )}
+                      <span className="flex-1 flex flex-col leading-tight">
+                        {mov.vehiculo?.placa
+                          ? <span className="font-mono font-bold text-gray-900 tracking-widest">{mov.vehiculo.placa}</span>
+                          : <span className="text-gray-400 text-xs">Sin placa</span>
+                        }
+                        <span className="text-xs text-gray-400">{mov.fundo_origen?.descripcion ?? '—'}</span>
                       </span>
                       <span className="text-xs text-gray-400 shrink-0">{detalles.length} detalle{detalles.length !== 1 ? 's' : ''}</span>
                     </button>
@@ -618,7 +619,7 @@ export default function MovimientoPage() {
                                     }
                                   </td>
                                   <td className="px-5 py-2.5 font-medium text-gray-700">
-                                    {d.material?.descripcion ?? '—'}
+                                    {d.material?.descripcion ?? '—'}{d.tipo && <span className="ml-1 text-xs text-gray-400">— {d.tipo}</span>}
                                     {d.material?.um && <span className="ml-1 text-xs text-gray-400">{d.material.um}</span>}
                                   </td>
                                   <td className="px-5 py-2.5 font-semibold text-gray-800">{d.cantidad}</td>
