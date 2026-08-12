@@ -60,16 +60,34 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    // Verificar si tiene movimientos asociados
-    const { count } = await supabase
-      .from('movimiento')
-      .select('id', { count: 'exact', head: true })
-      .or(`idusuarioorigen.eq.${id},idusuariodestino.eq.${id}`);
+    const [
+      { count: movCount },
+      { count: ingresoCount },
+      { count: detalleCount },
+    ] = await Promise.all([
+      supabase
+        .from('movimiento')
+        .select('id', { count: 'exact', head: true })
+        .or(`idusuarioorigen.eq.${id},idusuariodestino.eq.${id}`),
+      supabase
+        .from('ingreso')
+        .select('id', { count: 'exact', head: true })
+        .eq('idusuario', id),
+      supabase
+        .from('movimiento_detalle')
+        .select('id', { count: 'exact', head: true })
+        .eq('idusuariorecepcion', id),
+    ]);
 
-    if (count && count > 0) {
+    const total = (movCount ?? 0) + (ingresoCount ?? 0) + (detalleCount ?? 0);
+    if (total > 0) {
+      const partes: string[] = [];
+      if (movCount)     partes.push(`${movCount} movimiento(s)`);
+      if (ingresoCount) partes.push(`${ingresoCount} ingreso(s)`);
+      if (detalleCount) partes.push(`${detalleCount} recepción(es)`);
       return NextResponse.json({
         success: false,
-        error: `No se puede eliminar: el usuario tiene ${count} movimiento(s) registrado(s). Desactívalo en su lugar.`,
+        error: `No se puede eliminar: el usuario tiene ${partes.join(', ')}. Desactívalo en su lugar.`,
       } as ApiResponse<null>, { status: 409 });
     }
 

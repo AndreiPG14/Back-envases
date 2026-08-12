@@ -6,22 +6,26 @@ import PageHeader from '../../components/PageHeader';
 
 interface Rol       { id: number; descripcion: string }
 interface Fundo     { id: number; descripcion: string }
+interface GrupoVista { id: number; descripcion: string; vistas: string[] }
 interface Trabajador { dni: string; nombres: string; apellido_paterno: string; apellido_materno: string }
 interface Usuario   {
   id: number;
   idfundo: number | null;
+  idgrupo_vista: number | null;
   trabajadorid: string;
   rolid: number;
   username: string;
   rol: Rol | null;
   trabajador: Trabajador | null;
   fundo: Fundo | null;
+  grupo_vista: GrupoVista | null;
 }
 
 export default function UsuarioPage() {
   const [data, setData]           = useState<Usuario[]>([]);
   const [roles, setRoles]         = useState<Rol[]>([]);
   const [fundos, setFundos]       = useState<Fundo[]>([]);
+  const [grupos, setGrupos]       = useState<GrupoVista[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState('');
   const [showModal, setShowModal]         = useState(false);
@@ -45,13 +49,15 @@ export default function UsuarioPage() {
     fetchData();
     fetch('/api/roles').then((r) => r.json()).then((res) => setRoles(res.data ?? []));
     fetch('/api/fundo').then((r) => r.json()).then((res) => setFundos(res.data ?? []));
+    fetch('/api/grupo-vista').then((r) => r.json()).then((res) => setGrupos(res.data ?? []));
   }, []);
 
   const handleDelete = async (id: number) => {
     if (!confirm('¿Eliminar este usuario?')) return;
     setDeleting(id);
-    await fetch(`/api/usuario/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/usuario/${id}`, { method: 'DELETE' }).then((r) => r.json());
     setDeleting(null);
+    if (!res.success) { setError(res.error); return; }
     fetchData();
   };
 
@@ -93,7 +99,7 @@ export default function UsuarioPage() {
           <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/80">
-                {['ID', 'Trabajador', 'DNI', 'Usuario', 'Rol', 'Ubicación', ''].map((h) => (
+                {['ID', 'Trabajador', 'DNI', 'Usuario', 'Rol', 'Ubicación', 'Grupo Vistas', ''].map((h) => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -117,6 +123,11 @@ export default function UsuarioPage() {
                   <td className="px-5 py-3.5">
                     {u.fundo
                       ? <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">{u.fundo.descripcion}</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {u.grupo_vista
+                      ? <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2.5 py-0.5 rounded-full">{u.grupo_vista.descripcion}</span>
                       : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-5 py-3.5">
@@ -147,6 +158,7 @@ export default function UsuarioPage() {
         <ModalCrearUsuario
           roles={roles}
           fundos={fundos}
+          grupos={grupos}
           onClose={() => setShowModal(false)}
           onCreated={() => { setShowModal(false); fetchData(); }}
         />
@@ -157,6 +169,7 @@ export default function UsuarioPage() {
           usuario={editUsuario}
           roles={roles}
           fundos={fundos}
+          grupos={grupos}
           onClose={() => setEditUsuario(null)}
           onSaved={() => { setEditUsuario(null); fetchData(); }}
         />
@@ -167,12 +180,13 @@ export default function UsuarioPage() {
 
 /* ── Modal editar usuario ── */
 function ModalEditarUsuario({
-  usuario, roles, fundos, onClose, onSaved,
+  usuario, roles, fundos, grupos, onClose, onSaved,
 }: {
-  usuario: Usuario; roles: Rol[]; fundos: Fundo[]; onClose: () => void; onSaved: () => void;
+  usuario: Usuario; roles: Rol[]; fundos: Fundo[]; grupos: GrupoVista[]; onClose: () => void; onSaved: () => void;
 }) {
   const [rolid, setRolid]               = useState(String(usuario.rolid));
   const [idfundo, setIdfundo]           = useState(usuario.idfundo ? String(usuario.idfundo) : '');
+  const [idgrupoVista, setIdgrupoVista] = useState(usuario.idgrupo_vista ? String(usuario.idgrupo_vista) : '');
   const [username, setUsername]         = useState(usuario.username ?? '');
   const [password, setPassword]         = useState('');
   const [showPass, setShowPass]         = useState(false);
@@ -193,6 +207,7 @@ function ModalEditarUsuario({
     const body: any = {
       rolid:   Number(rolid),
       idfundo: idfundo ? Number(idfundo) : null,
+      idgrupo_vista: idgrupoVista ? Number(idgrupoVista) : null,
       username: username.trim(),
     };
     if (password.trim()) body.password = password.trim();
@@ -264,6 +279,18 @@ function ModalEditarUsuario({
             </div>
           </div>
 
+          {/* Grupo de Vistas */}
+          <div>
+            <label className={labelCls}>Grupo de Vistas <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <div className="relative">
+              <select value={idgrupoVista} onChange={(e) => setIdgrupoVista(e.target.value)} className={inputCls + ' appearance-none pr-8'}>
+                <option value="">Sin grupo asignado (acceso total)</option>
+                {grupos.map((g) => <option key={g.id} value={g.id}>{g.descripcion}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
           {/* Username */}
           <div>
             <label className={labelCls}>Usuario <span className="text-red-400">*</span></label>
@@ -321,9 +348,9 @@ function ModalEditarUsuario({
 
 /* ── Modal crear usuario ── */
 function ModalCrearUsuario({
-  roles, fundos, onClose, onCreated,
+  roles, fundos, grupos, onClose, onCreated,
 }: {
-  roles: Rol[]; fundos: Fundo[]; onClose: () => void; onCreated: () => void;
+  roles: Rol[]; fundos: Fundo[]; grupos: GrupoVista[]; onClose: () => void; onCreated: () => void;
 }) {
   const [dni, setDni]                     = useState('');
   const [buscando, setBuscando]           = useState(false);
@@ -331,6 +358,7 @@ function ModalCrearUsuario({
   const [errorBusqueda, setErrorBusqueda] = useState('');
   const [rolid, setRolid]                 = useState('');
   const [idfundo, setIdfundo]             = useState('');
+  const [idgrupoVista, setIdgrupoVista]   = useState('');
   const [username, setUsername]           = useState('');
   const [password, setPassword]           = useState('');
   const [showPass, setShowPass]           = useState(false);
@@ -365,10 +393,11 @@ function ModalCrearUsuario({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        trabajadorid: trabajador.dni,
-        rolid:        Number(rolid),
-        idfundo:      idfundo ? Number(idfundo) : null,
-        username:     username.trim(),
+        trabajadorid:  trabajador.dni,
+        rolid:         Number(rolid),
+        idfundo:       idfundo ? Number(idfundo) : null,
+        idgrupo_vista: idgrupoVista ? Number(idgrupoVista) : null,
+        username:      username.trim(),
         password,
       }),
     }).then((r) => r.json());
@@ -448,6 +477,20 @@ function ModalCrearUsuario({
               <select value={idfundo} onChange={(e) => setIdfundo(e.target.value)} className={inputCls + ' appearance-none pr-8'}>
                 <option value="">Sin ubicación asignada</option>
                 {fundos.map((f) => <option key={f.id} value={f.id}>{f.descripcion}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Grupo de Vistas */}
+          <div>
+            <label className={labelCls}>
+              Grupo de Vistas <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <div className="relative">
+              <select value={idgrupoVista} onChange={(e) => setIdgrupoVista(e.target.value)} className={inputCls + ' appearance-none pr-8'}>
+                <option value="">Sin grupo asignado (acceso total)</option>
+                {grupos.map((g) => <option key={g.id} value={g.id}>{g.descripcion}</option>)}
               </select>
               <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             </div>

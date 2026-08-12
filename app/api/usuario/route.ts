@@ -16,32 +16,40 @@ export async function GET() {
     const dnis     = [...new Set(usuarios.map((u: any) => u.trabajadorid))];
     const rolIds   = [...new Set(usuarios.map((u: any) => u.rolid))];
     const fundoIds = [...new Set(usuarios.map((u: any) => u.idfundo).filter(Boolean))];
+    const grupoIds = [...new Set(usuarios.map((u: any) => u.idgrupo_vista).filter(Boolean))];
 
     const [
       { data: trabajadores, error: errTrab },
       { data: roles,        error: errRoles },
       { data: fundos,       error: errFundos },
+      { data: gruposVista,  error: errGrupos },
     ] = await Promise.all([
       supabase.from('trabajadores').select('dni, nombres, apellido_paterno, apellido_materno').in('dni', dnis),
       supabase.from('roles').select('id, descripcion').in('id', rolIds),
       fundoIds.length > 0
         ? supabase.from('fundo').select('id, descripcion').in('id', fundoIds)
         : Promise.resolve({ data: [], error: null }),
+      grupoIds.length > 0
+        ? supabase.from('grupo_vista').select('id, descripcion, vistas').in('id', grupoIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (errTrab)   throw errTrab;
     if (errRoles)  throw errRoles;
     if (errFundos) throw errFundos;
+    if (errGrupos) throw errGrupos;
 
     const rolesMap  = Object.fromEntries((roles  ?? []).map((r: any) => [String(r.id), r]));
     const trabMap   = Object.fromEntries((trabajadores ?? []).map((t: any) => [String(t.dni), t]));
     const fundosMap = Object.fromEntries((fundos ?? []).map((f: any) => [String(f.id), f]));
+    const gruposMap = Object.fromEntries((gruposVista ?? []).map((g: any) => [String(g.id), g]));
 
     const enriched = usuarios.map((u: any) => ({
       ...u,
-      rol:       rolesMap[String(u.rolid)]       ?? null,
-      trabajador: trabMap[String(u.trabajadorid)] ?? null,
-      fundo:     u.idfundo ? (fundosMap[String(u.idfundo)] ?? null) : null,
+      rol:         rolesMap[String(u.rolid)]       ?? null,
+      trabajador:  trabMap[String(u.trabajadorid)] ?? null,
+      fundo:       u.idfundo ? (fundosMap[String(u.idfundo)] ?? null) : null,
+      grupo_vista: u.idgrupo_vista ? (gruposMap[String(u.idgrupo_vista)] ?? null) : null,
     }));
 
     return NextResponse.json({ success: true, data: enriched } as ApiResponse<any[]>);
@@ -76,11 +84,12 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('usuario')
       .insert([{
-        idfundo:      body.idfundo ?? null,
-        trabajadorid: body.trabajadorid,
-        rolid:        body.rolid,
-        username:     body.username,
-        password:     hashedPassword,
+        idfundo:       body.idfundo ?? null,
+        idgrupo_vista: body.idgrupo_vista ?? null,
+        trabajadorid:  body.trabajadorid,
+        rolid:         body.rolid,
+        username:      body.username,
+        password:      hashedPassword,
       }])
       .select('*')
       .single();
@@ -93,9 +102,15 @@ export async function POST(request: NextRequest) {
       fundo = f;
     }
 
+    let grupo_vista = null;
+    if (body.idgrupo_vista) {
+      const { data: g } = await supabase.from('grupo_vista').select('id, descripcion, vistas').eq('id', body.idgrupo_vista).single();
+      grupo_vista = g;
+    }
+
     return NextResponse.json({
       success: true,
-      data: { ...data, rol, trabajador, fundo },
+      data: { ...data, rol, trabajador, fundo, grupo_vista },
       message: 'Usuario creado exitosamente',
     } as ApiResponse<any>, { status: 201 });
   } catch (error: any) {

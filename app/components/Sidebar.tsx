@@ -2,44 +2,66 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   Package, Truck, Wheat, Building2, Settings2,
   ShieldCheck, UserCircle, ArrowLeftRight,
-  Warehouse, ChevronRight, PackagePlus, LayoutGrid, Layers, Navigation,
+  Warehouse, ChevronRight, PackagePlus, LayoutGrid, Layers, Navigation, PackageX, FolderOpen,
 } from 'lucide-react';
 
-const groups = [
+const allGroups = [
   {
     label: 'Maestros',
     items: [
-      { href: '/tipo-material', label: 'Tipos',         icon: Layers      },
-      { href: '/materiales',   label: 'Materiales',   icon: Package     },
-      { href: '/vehiculo',     label: 'Vehículos',    icon: Truck       },
-      { href: '/fundo',        label: 'Ubicaciones',  icon: Wheat       },
-      { href: '/empresa',      label: 'Empresas',     icon: Building2   },
-      { href: '/operacion',    label: 'Operaciones',  icon: Settings2   },
-      { href: '/roles',        label: 'Roles',        icon: ShieldCheck },
-      { href: '/usuario',      label: 'Usuarios',     icon: UserCircle  },
+      { href: '/tipo-material', key: 'tipo-material', label: 'Tipos',         icon: Layers      },
+      { href: '/materiales',    key: 'materiales',    label: 'Materiales',   icon: Package     },
+      { href: '/vehiculo',      key: 'vehiculo',      label: 'Vehículos',    icon: Truck       },
+      { href: '/fundo',         key: 'fundo',         label: 'Ubicaciones',  icon: Wheat       },
+      { href: '/empresa',       key: 'empresa',       label: 'Empresas',     icon: Building2   },
+      { href: '/operacion',     key: 'operacion',     label: 'Operaciones',  icon: Settings2   },
+      { href: '/roles',         key: 'roles',         label: 'Roles',        icon: ShieldCheck },
+      { href: '/usuario',       key: 'usuario',       label: 'Usuarios',     icon: UserCircle  },
+      { href: '/grupo-vista',   key: 'grupo-vista',   label: 'Agrupador Vistas', icon: FolderOpen },
     ],
   },
   {
     label: 'Transacciones',
     items: [
-      { href: '/ingreso',    label: 'Ingresos',    icon: PackagePlus    },
-      { href: '/movimiento', label: 'Movimientos', icon: ArrowLeftRight },
-      { href: '/transito',   label: 'Tránsito',    icon: Navigation    },
+      { href: '/ingreso',       key: 'ingreso',       label: 'Ingresos',    icon: PackagePlus    },
+      { href: '/movimiento',    key: 'movimiento',    label: 'Movimientos', icon: ArrowLeftRight },
+      { href: '/transito',      key: 'transito',      label: 'Tránsito',    icon: Navigation    },
+      { href: '/merma-salidas', key: 'merma-salidas', label: 'Salidas',     icon: PackageX      },
     ],
   },
   {
     label: 'Inventario',
     items: [
-      { href: '/inventario', label: 'Stock por Ubicación', icon: LayoutGrid },
+      { href: '/inventario', key: 'inventario', label: 'Stock por Ubicación', icon: LayoutGrid },
     ],
   },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [vistas, setVistas] = useState<string[] | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => { setVistas(d.user?.vistas ?? null); })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  const filteredGroups = allGroups
+    .map((group) => ({
+      ...group,
+      items: vistas
+        ? group.items.filter((item) => vistas.includes(item.key))
+        : group.items,
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside className="w-64 min-h-screen bg-slate-900 flex flex-col shrink-0">
@@ -58,7 +80,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-        {groups.map((group) => (
+        {loaded && filteredGroups.map((group) => (
           <div key={group.label}>
             <p className="px-3 mb-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
               {group.label}

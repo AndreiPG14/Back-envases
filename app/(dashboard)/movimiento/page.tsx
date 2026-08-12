@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRealtimeRefresh } from '@/lib/useRealtimeRefresh';
-import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode, FileSpreadsheet, Upload, PackageCheck, Inbox, Camera } from 'lucide-react';
+import { ArrowLeftRight, TrendingDown, ChevronDown, ChevronRight, X, CheckCircle2, Clock, AlertTriangle, Pencil, Loader2, QrCode, FileSpreadsheet, Upload, PackageCheck, Inbox, Camera, CalendarDays } from 'lucide-react';
 import PageHeader from '../../components/PageHeader';
 import * as XLSX from 'xlsx';
 
@@ -281,6 +281,20 @@ function ModalDetalle({ detalle: detalleInicial, mov, onClose, onDetalleUpdated 
             </div>
           </div>
 
+          {/* tipo merma */}
+          {merma != null && merma > 0 && detalle.tipo_merma && (
+            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold ${
+              detalle.tipo_merma === 'ROTO'
+                ? 'bg-red-50 text-red-600 border border-red-100'
+                : 'bg-blue-50 text-blue-600 border border-blue-100'
+            }`}>
+              {detalle.tipo_merma === 'ROTO'
+                ? <span>Motivo de merma: <strong>ROTO</strong> — afecta stock de merma</span>
+                : <span>Motivo de merma: <strong>INCOMPLETO</strong> — no afecta stock de merma</span>
+              }
+            </div>
+          )}
+
           {estado !== 'PENDIENTE' && confirmada != null && detalle.cantidad > 0 && (
             <div>
               <div className="flex justify-between text-xs text-gray-400 mb-1">
@@ -418,6 +432,8 @@ export default function MovimientoPage() {
   const [expanded, setExpanded]   = useState<Set<number>>(new Set());
   const [selected, setSelected]   = useState<{ detalle: any; mov: any } | null>(null);
   const [qrMov, setQrMov]         = useState<any | null>(null);
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
 
   const fetchMovimientos = useCallback(() => {
     fetch('/api/movimiento')
@@ -442,9 +458,25 @@ export default function MovimientoPage() {
     });
   };
 
-  const totalDetalles = data.reduce((s, m) => s + (m.movimiento_detalle?.length ?? 0), 0);
-  const traslados = data.reduce((s, m) => s + (m.movimiento_detalle?.filter((d: any) => d.operacion?.descripcion?.toUpperCase() === 'TRASLADO').length ?? 0), 0);
-  const salidas   = data.reduce((s, m) => s + (m.movimiento_detalle?.filter((d: any) => d.operacion?.descripcion?.toUpperCase() === 'SALIDA').length ?? 0), 0);
+  const filtered = useMemo(() => {
+    return data.filter(m => {
+      const fecha = m.fecha ? new Date(m.fecha) : null;
+      if (fechaDesde && fecha) {
+        const desde = new Date(fechaDesde);
+        desde.setHours(0, 0, 0, 0);
+        if (fecha < desde) return false;
+      }
+      if (fechaHasta && fecha) {
+        const hasta = new Date(fechaHasta);
+        hasta.setHours(23, 59, 59, 999);
+        if (fecha > hasta) return false;
+      }
+      return true;
+    });
+  }, [data, fechaDesde, fechaHasta]);
+
+  const totalDetalles = filtered.reduce((s, m) => s + (m.movimiento_detalle?.length ?? 0), 0);
+  const traslados = filtered.reduce((s, m) => s + (m.movimiento_detalle?.length ?? 0), 0);
 
   const fmtFecha = (v: string) => v
     ? new Date(v).toLocaleDateString('es-PE', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Lima' })
@@ -528,32 +560,67 @@ export default function MovimientoPage() {
 
       {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
 
-      <div className="grid grid-cols-3 gap-4">
+      {/* Filtros por fecha */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <CalendarDays size={15} className="text-gray-400" />
+          <span className="font-medium">Filtrar por fecha:</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-400">Desde</label>
+          <input
+            type="date"
+            value={fechaDesde}
+            onChange={e => setFechaDesde(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-400">Hasta</label>
+          <input
+            type="date"
+            value={fechaHasta}
+            onChange={e => setFechaHasta(e.target.value)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+          />
+        </div>
+        {(fechaDesde || fechaHasta) && (
+          <button
+            onClick={() => { setFechaDesde(''); setFechaHasta(''); }}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white hover:bg-gray-50 transition-colors"
+          >
+            <X size={12} /> Limpiar
+          </button>
+        )}
+        {(fechaDesde || fechaHasta) && (
+          <span className="text-xs text-indigo-600 font-medium bg-indigo-50 px-2.5 py-1 rounded-full">
+            {filtered.length} movimiento{filtered.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
         <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3.5 text-slate-700">
-          <p className="text-2xl font-bold">{totalDetalles}</p>
-          <p className="text-xs mt-0.5 opacity-75">Total detalles</p>
+          <p className="text-2xl font-bold">{filtered.length}</p>
+          <p className="text-xs mt-0.5 opacity-75">Movimientos</p>
         </div>
         <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3.5 text-indigo-700">
-          <p className="text-2xl font-bold">{traslados}</p>
-          <p className="text-xs mt-0.5 opacity-75">Traslados</p>
-        </div>
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3.5 text-red-600">
-          <p className="text-2xl font-bold">{salidas}</p>
-          <p className="text-xs mt-0.5 opacity-75">Salidas</p>
+          <p className="text-2xl font-bold">{totalDetalles}</p>
+          <p className="text-xs mt-0.5 opacity-75">Total traslados</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex justify-center items-center py-20 text-gray-400 text-sm">Cargando...</div>
-        ) : data.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-2">
             <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400"><Inbox size={22} /></div>
             <p className="text-sm font-medium text-gray-500">Sin movimientos registrados</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {data.map((mov) => {
+            {filtered.map((mov) => {
               const isOpen = expanded.has(mov.id);
               const detalles: any[] = mov.movimiento_detalle ?? [];
               return (
