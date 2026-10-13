@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { Roles, ApiResponse } from '@/lib/types';
 import { validarRequeridos, validarMaxLength, formatearErrores } from '@/lib/validations';
 
@@ -8,8 +8,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     if (!id || isNaN(Number(id))) return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
 
-    const { data, error } = await supabase.from('roles').select('*').eq('id', id).single();
-    if (error) throw error;
+    const data = await queryOne('SELECT * FROM roles WHERE id = $1', [id]);
     if (!data) return NextResponse.json({ success: false, error: 'Rol no encontrado' }, { status: 404 });
 
     return NextResponse.json({ success: true, data } as ApiResponse<Roles>);
@@ -30,8 +29,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     ];
     if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
 
-    const { data, error } = await supabase.from('roles').update({ descripcion: body.descripcion }).eq('id', id).select().single();
-    if (error) throw error;
+    const data = await queryOne('UPDATE roles SET descripcion = $1 WHERE id = $2 RETURNING *', [body.descripcion, id]);
 
     return NextResponse.json({ success: true, data, message: 'Rol actualizado exitosamente' } as ApiResponse<Roles>);
   } catch (error: any) {
@@ -44,8 +42,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const { id } = await params;
     if (!id || isNaN(Number(id))) return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
 
-    const { error } = await supabase.from('roles').delete().eq('id', id);
-    if (error) throw error;
+    await query('DELETE FROM roles WHERE id = $1', [id]);
 
     return NextResponse.json({ success: true, message: 'Rol eliminado exitosamente' } as ApiResponse<null>);
   } catch (error: any) {

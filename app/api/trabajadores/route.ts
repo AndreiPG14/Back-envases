@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query } from '@/lib/db';
 import { Trabajadores, ApiResponse } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
   try {
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .select('dni,nombres,apellido_paterno,apellido_materno,supervisor,eliminado,empresa_id,tipo_trabajador_id,area,cargo,tipo_trabajador,regimen,centro_costo,vigencia,fecha_ingreso,fecha_cese,cod_funcionario,planilla_nisira,created_at')
-      .order('apellido_paterno', { ascending: true });
-
-    if (error) throw error;
+    const data = await query(
+      `SELECT dni,nombres,apellido_paterno,apellido_materno,supervisor,eliminado,empresa_id,tipo_trabajador_id,area,cargo,tipo_trabajador,regimen,centro_costo,vigencia,fecha_ingreso,fecha_cese,cod_funcionario,planilla_nisira,created_at
+       FROM trabajadores ORDER BY apellido_paterno ASC`
+    );
 
     return NextResponse.json({
       success: true,
@@ -35,7 +33,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Remover campos que no deben ser insertados
     const { id, created_at, ...safeData } = {
       dni,
       nombres,
@@ -44,12 +41,18 @@ export async function POST(request: NextRequest) {
       ...rest
     };
 
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .upsert([safeData], { onConflict: 'dni' })
-      .select();
+    const keys = Object.keys(safeData);
+    const values = Object.values(safeData);
+    const placeholders = keys.map((_, i) => `$${i + 1}`);
+    const updateSet = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
 
-    if (error) throw error;
+    const data = await query(
+      `INSERT INTO trabajadores (${keys.join(', ')})
+       VALUES (${placeholders.join(', ')})
+       ON CONFLICT (dni) DO UPDATE SET ${updateSet}
+       RETURNING *`,
+      values
+    );
 
     return NextResponse.json(
       {

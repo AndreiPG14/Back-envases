@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
-// POST /api/merma-salidas/[id]/registrar — marca la salida como registrada
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -10,24 +9,20 @@ export async function POST(
   try {
     const { id } = await params;
 
-    const { data: detalle } = await supabase
-      .from('movimiento_detalle')
-      .select('id, tipo_merma, merma, merma_salida_registrada')
-      .eq('id', id)
-      .single();
+    const detalle = await queryOne(
+      `SELECT id, tipo_merma, merma, merma_salida_registrada FROM movimiento_detalle WHERE id = $1`,
+      [id]
+    );
 
     if (!detalle) return NextResponse.json({ success: false, error: 'Detalle no encontrado' }, { status: 404 });
     if (detalle.tipo_merma !== 'ROTO') return NextResponse.json({ success: false, error: 'Solo se pueden registrar salidas de merma ROTO' }, { status: 400 });
     if (detalle.merma_salida_registrada) return NextResponse.json({ success: false, error: 'La salida ya fue registrada' }, { status: 400 });
 
-    const { data: updated, error } = await supabase
-      .from('movimiento_detalle')
-      .update({ merma_salida_registrada: true })
-      .eq('id', id)
-      .select()
-      .single();
+    const updated = await queryOne(
+      `UPDATE movimiento_detalle SET merma_salida_registrada = true WHERE id = $1 RETURNING *`,
+      [id]
+    );
 
-    if (error) throw error;
     return NextResponse.json({ success: true, data: updated, message: 'Salida registrada correctamente' } as ApiResponse<any>);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });

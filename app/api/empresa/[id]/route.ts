@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { Empresa, ApiResponse } from '@/lib/types';
 
 export async function GET(
@@ -8,13 +8,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { data, error } = await supabase
-      .from('empresa')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const data = await queryOne('SELECT * FROM empresa WHERE id = $1', [id]);
 
-    if (error) throw error;
     if (!data) {
       return NextResponse.json(
         { success: false, error: 'Empresa no encontrada' } as ApiResponse<null>,
@@ -37,14 +32,11 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { data, error } = await supabase
-      .from('empresa')
-      .update(body)
-      .eq('id', id)
-      .select()
-      .single();
+    const data = await queryOne(
+      'UPDATE empresa SET descripcion = $1 WHERE id = $2 RETURNING *',
+      [body.descripcion, id]
+    );
 
-    if (error) throw error;
     return NextResponse.json({
       success: true,
       data,
@@ -64,9 +56,8 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { error } = await supabase.from('empresa').delete().eq('id', id);
+    await query('DELETE FROM empresa WHERE id = $1', [id]);
 
-    if (error) throw error;
     return NextResponse.json({
       success: true,
       message: 'Empresa eliminada',

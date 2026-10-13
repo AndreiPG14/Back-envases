@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
 export async function POST(
@@ -14,8 +14,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'cantidad_confirmada es requerida' }, { status: 400 });
     }
 
-    const { data: detalle } = await supabase
-      .from('movimiento_detalle').select('*').eq('id', detalleId).single();
+    const detalle = await queryOne(`SELECT * FROM movimiento_detalle WHERE id = $1`, [detalleId]);
 
     if (!detalle) return NextResponse.json({ success: false, error: 'Detalle no encontrado' }, { status: 404 });
     if (detalle.estado !== 'PENDIENTE') return NextResponse.json({ success: false, error: 'Este detalle ya fue confirmado' }, { status: 400 });
@@ -24,30 +23,30 @@ export async function POST(
     const merma    = Number(detalle.cantidad) - cantConf;
     const estado   = merma > 0 ? 'INCOMPLETO' : 'COMPLETO';
 
-    // Aumentar stock en destino
-    const { data: sfDest } = await supabase
-      .from('stock_fundo').select('stock').eq('idmaterial', detalle.idmaterial).eq('idfundo', detalle.idfundodestino).single();
+    await query(`
+      INSERT INTO stock_fundo (idmaterial, idfundo, stock)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (idmaterial, idfundo) DO UPDATE SET stock = stock_fundo.stock + $3
+    `, [detalle.idmaterial, detalle.idfundodestino, cantConf]);
 
-    const stockDest = sfDest?.stock ?? 0;
-    const { error: upErr } = await supabase
-      .from('stock_fundo')
-      .upsert({ idmaterial: detalle.idmaterial, idfundo: detalle.idfundodestino, stock: stockDest + cantConf }, { onConflict: 'idmaterial,idfundo' });
-    if (upErr) throw upErr;
+    const setClauses = [
+      'estado = $1',
+      'cantidad_confirmada = $2',
+      'merma = $3',
+      'fecha_recepcion = $4',
+    ];
+    const values: any[] = [estado, cantConf, merma, new Date().toISOString()];
+    let idx = 5;
 
-    const { data: updated, error: updErr } = await supabase
-      .from('movimiento_detalle')
-      .update({
-        estado,
-        cantidad_confirmada: cantConf,
-        merma,
-        fecha_recepcion: new Date().toISOString(),
-        ...(observaciones ? { observaciones }                         : {}),
-        ...(idusuario     ? { idusuariorecepcion: Number(idusuario) } : {}),
-        ...(merma > 0 && tipo_merma ? { tipo_merma }                  : { tipo_merma: null }),
-      })
-      .eq('id', detalleId)
-      .select().single();
-    if (updErr) throw updErr;
+    if (observaciones) { setClauses.push(`observaciones = $${idx++}`); values.push(observaciones); }
+    if (idusuario) { setClauses.push(`idusuariorecepcion = $${idx++}`); values.push(Number(idusuario)); }
+    if (merma > 0 && tipo_merma) { setClauses.push(`tipo_merma = $${idx++}`); values.push(tipo_merma); }
+    else { setClauses.push(`tipo_merma = $${idx++}`); values.push(null); }
+
+    values.push(detalleId);
+    const updated = await queryOne(`
+      UPDATE movimiento_detalle SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *
+    `, values);
 
     return NextResponse.json({ success: true, data: updated, message: `Confirmado. Merma: ${merma}` } as ApiResponse<any>);
   } catch (error: any) {

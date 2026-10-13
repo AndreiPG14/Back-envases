@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 import bcrypt from 'bcryptjs';
 
@@ -9,14 +9,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { data: usuario, error } = await supabase.from('usuario').select('*').eq('id', id).single();
+    const usuario = await queryOne('SELECT * FROM usuario WHERE id = $1', [id]);
 
-    if (error) throw error;
     if (!usuario) return NextResponse.json({ success: false, error: 'Usuario no encontrado' } as ApiResponse<null>, { status: 404 });
 
-    const [{ data: rol }, { data: trabajador }] = await Promise.all([
-      supabase.from('roles').select('id, descripcion').eq('id', usuario.rolid).single(),
-      supabase.from('trabajadores').select('dni, nombres, apellido_paterno, apellido_materno').eq('dni', usuario.trabajadorid).single(),
+    const [rol, trabajador] = await Promise.all([
+      queryOne('SELECT id, descripcion FROM roles WHERE id = $1', [usuario.rolid]),
+      queryOne('SELECT dni, nombres, apellido_paterno, apellido_materno FROM trabajadores WHERE dni = $1', [usuario.trabajadorid]),
     ]);
 
     return NextResponse.json({ success: true, data: { ...usuario, rol, trabajador } } as ApiResponse<any>);
@@ -39,12 +38,18 @@ export async function PUT(
       delete body.password;
     }
 
-    const { data: updated, error } = await supabase.from('usuario').update(body).eq('id', id).select('*').single();
-    if (error) throw error;
+    const keys = Object.keys(body);
+    const values = Object.values(body);
+    const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
 
-    const [{ data: rol }, { data: trabajador }] = await Promise.all([
-      supabase.from('roles').select('id, descripcion').eq('id', updated.rolid).single(),
-      supabase.from('trabajadores').select('dni, nombres, apellido_paterno, apellido_materno').eq('dni', updated.trabajadorid).single(),
+    const updated = await queryOne(
+      `UPDATE usuario SET ${setClause} WHERE id = $${keys.length + 1} RETURNING *`,
+      [...values, id]
+    );
+
+    const [rol, trabajador] = await Promise.all([
+      queryOne('SELECT id, descripcion FROM roles WHERE id = $1', [updated.rolid]),
+      queryOne('SELECT dni, nombres, apellido_paterno, apellido_materno FROM trabajadores WHERE dni = $1', [updated.trabajadorid]),
     ]);
 
     return NextResponse.json({ success: true, data: { ...updated, rol, trabajador }, message: 'Usuario actualizado' } as ApiResponse<any>);
@@ -60,26 +65,23 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const [
-      { count: movCount },
-      { count: ingresoCount },
-      { count: detalleCount },
-    ] = await Promise.all([
-      supabase
-        .from('movimiento')
-        .select('id', { count: 'exact', head: true })
-        .or(`idusuarioorigen.eq.${id},idusuariodestino.eq.${id}`),
-      supabase
-        .from('ingreso')
-        .select('id', { count: 'exact', head: true })
-        .eq('idusuario', id),
-      supabase
-        .from('movimiento_detalle')
-        .select('id', { count: 'exact', head: true })
-        .eq('idusuariorecepcion', id),
+    const [movResult, ingresoResult, detalleResult] = await Promise.all([
+      queryOne<{ count: number }>(
+        'SELECT COUNT(*)::int AS count FROM movimiento WHERE idusuarioorigen = $1 OR idusuariodestino = $1', [id]
+      ),
+      queryOne<{ count: number }>(
+        'SELECT COUNT(*)::int AS count FROM ingreso WHERE idusuario = $1', [id]
+      ),
+      queryOne<{ count: number }>(
+        'SELECT COUNT(*)::int AS count FROM movimiento_detalle WHERE idusuariorecepcion = $1', [id]
+      ),
     ]);
 
-    const total = (movCount ?? 0) + (ingresoCount ?? 0) + (detalleCount ?? 0);
+    const movCount = movResult?.count ?? 0;
+    const ingresoCount = ingresoResult?.count ?? 0;
+    const detalleCount = detalleResult?.count ?? 0;
+
+    const total = movCount + ingresoCount + detalleCount;
     if (total > 0) {
       const partes: string[] = [];
       if (movCount)     partes.push(`${movCount} movimiento(s)`);
@@ -91,8 +93,7 @@ export async function DELETE(
       } as ApiResponse<null>, { status: 409 });
     }
 
-    const { error } = await supabase.from('usuario').delete().eq('id', id);
-    if (error) throw error;
+    await query('DELETE FROM usuario WHERE id = $1', [id]);
     return NextResponse.json({ success: true, message: 'Usuario eliminado' } as ApiResponse<null>);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });

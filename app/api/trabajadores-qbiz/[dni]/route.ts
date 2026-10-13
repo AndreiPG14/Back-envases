@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { Trabajadores, ApiResponse } from '@/lib/types';
 
 export async function GET(
@@ -9,13 +9,8 @@ export async function GET(
   try {
     const { dni } = await params;
 
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .select('*')
-      .eq('dni', dni)
-      .single();
+    const data = await queryOne('SELECT * FROM trabajadores WHERE dni = $1', [dni]);
 
-    if (error) throw error;
     if (!data) {
       return NextResponse.json(
         { success: false, error: 'Trabajador no encontrado' } as ApiResponse<null>,
@@ -43,14 +38,14 @@ export async function PUT(
     const { dni } = await params;
     const body = await request.json();
 
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .update(body)
-      .eq('dni', dni)
-      .select()
-      .single();
+    const fields = Object.keys(body);
+    const values = Object.values(body);
+    const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(', ');
 
-    if (error) throw error;
+    const data = await queryOne(
+      `UPDATE trabajadores SET ${setClause} WHERE dni = $${fields.length + 1} RETURNING *`,
+      [...values, dni]
+    );
 
     return NextResponse.json({
       success: true,
@@ -72,15 +67,7 @@ export async function DELETE(
   try {
     const { dni } = await params;
 
-    // Marcar como eliminado (soft delete)
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .update({ eliminado: true })
-      .eq('dni', dni)
-      .select()
-      .single();
-
-    if (error) throw error;
+    await query('UPDATE trabajadores SET eliminado = true WHERE dni = $1', [dni]);
 
     return NextResponse.json({
       success: true,

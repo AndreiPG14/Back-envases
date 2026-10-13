@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -17,21 +17,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar usuario por username
-    const { data: user, error } = await supabase
-      .from('usuario')
-      .select('*')
-      .eq('username', usuario)
-      .single();
+    const user = await queryOne('SELECT * FROM usuario WHERE username = $1', [usuario]);
 
-    if (error || !user) {
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Usuario o contraseña incorrectos' },
         { status: 401 }
       );
     }
 
-    // Verificar contraseña
     const passwordOk = await bcrypt.compare(password, user.password ?? '');
     if (!passwordOk) {
       return NextResponse.json(
@@ -40,35 +34,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Traer trabajador, rol y ubicación
-    const [{ data: trabajador }, { data: rol }, { data: fundo }] = await Promise.all([
-      supabase
-        .from('trabajadores')
-        .select('dni, nombres, apellido_paterno, apellido_materno')
-        .eq('dni', user.trabajadorid)
-        .single(),
-      supabase
-        .from('roles')
-        .select('id, descripcion')
-        .eq('id', user.rolid)
-        .single(),
+    const [trabajador, rol, fundo] = await Promise.all([
+      queryOne(
+        'SELECT dni, nombres, apellido_paterno, apellido_materno FROM trabajadores WHERE dni = $1',
+        [user.trabajadorid]
+      ),
+      queryOne('SELECT id, descripcion FROM roles WHERE id = $1', [user.rolid]),
       user.idfundo
-        ? supabase.from('fundo').select('id, descripcion').eq('id', user.idfundo).single()
-        : Promise.resolve({ data: null }),
+        ? queryOne('SELECT id, descripcion FROM fundo WHERE id = $1', [user.idfundo])
+        : Promise.resolve(null),
     ]);
 
-    // Generar token JWT (expira en 30 días)
     const token = jwt.sign(
       { id: user.id, username: user.username, rolid: user.rolid },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
-    // Respuesta en el formato exacto que espera Flutter
     const userResponse = {
       id: user.id,
       username: user.username ?? '',
-      grupo: (fundo as any)?.descripcion ?? '',
+      grupo: fundo?.descripcion ?? '',
       idfundo: user.idfundo ?? null,
       trabajador: trabajador
         ? {

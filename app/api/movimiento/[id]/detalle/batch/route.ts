@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
-// POST /api/movimiento/[id]/detalle/batch
-// Body: { detalles: [{ idmaterial, idfundoorigen, idoperacion, cantidad, idfundodestino? }] }
-// Crea todos los detalles en una sola llamada y devuelve sus IDs para subir fotos después.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -18,11 +15,9 @@ export async function POST(
     if (detalles.length === 0)
       return NextResponse.json({ success: false, error: 'Sin detalles' }, { status: 400 });
 
-    // Cargar operaciones en un solo query
     const idOps = [...new Set(detalles.map((d) => d.idoperacion))];
-    const { data: operaciones } = await supabase
-      .from('operacion').select('id, descripcion').in('id', idOps);
-    const opMap = Object.fromEntries((operaciones ?? []).map((o) => [o.id, o.descripcion?.toUpperCase()]));
+    const operaciones = await query(`SELECT id, descripcion FROM operacion WHERE id = ANY($1)`, [idOps]);
+    const opMap = Object.fromEntries(operaciones.map((o) => [o.id, o.descripcion?.toUpperCase()]));
 
     const creados: any[] = [];
 
@@ -36,16 +31,14 @@ export async function POST(
 
       if (tipoOp === 'TRASLADO') {
         if (!idfundodestino)
-          return NextResponse.json({ success: false, error: 'TRASLADO requiere ubicación destino' }, { status: 400 });
+          return NextResponse.json({ success: false, error: 'TRASLADO requiere ubicacion destino' }, { status: 400 });
         if (idfundodestino === idfundoorigen)
           return NextResponse.json({ success: false, error: 'Origen y destino no pueden ser iguales' }, { status: 400 });
       }
 
-      // Verificar stock
-      const { data: mat } = await supabase.from('material').select('descripcion').eq('id', idmaterial).single();
+      const mat = await queryOne(`SELECT descripcion FROM material WHERE id = $1`, [idmaterial]);
       const matNombre = mat?.descripcion ?? `#${idmaterial}`;
-      const { data: sf } = await supabase
-        .from('stock_fundo').select('stock').eq('idmaterial', idmaterial).eq('idfundo', idfundoorigen).single();
+      const sf = await queryOne(`SELECT stock FROM stock_fundo WHERE idmaterial = $1 AND idfundo = $2`, [idmaterial, idfundoorigen]);
       const stock = sf?.stock ?? 0;
       if (stock < cant)
         return NextResponse.json({
@@ -53,27 +46,27 @@ export async function POST(
           error: `Stock insuficiente para "${matNombre}". Disponible: ${stock}, solicitado: ${cant}`,
         }, { status: 400 });
 
-      // Descontar stock
-      const { error: decErr } = await supabase.from('stock_fundo')
-        .upsert({ idmaterial, idfundo: idfundoorigen, stock: stock - cant }, { onConflict: 'idmaterial,idfundo' });
-      if (decErr) throw decErr;
+      await query(`
+        INSERT INTO stock_fundo (idmaterial, idfundo, stock)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (idmaterial, idfundo) DO UPDATE SET stock = stock_fundo.stock - $4
+      `, [idmaterial, idfundoorigen, stock - cant, cant]);
 
-      // Insertar detalle
-      const { data: detalle, error: detErr } = await supabase
-        .from('movimiento_detalle')
-        .insert([{
-          idmovimiento:        idMovimiento,
-          idmaterial,
-          cantidad:            cant,
-          idfundodestino:      idfundodestino ?? null,
-          idoperacion,
-          tipo:                tipo ?? null,
-          estado:              tipoOp === 'TRASLADO' ? 'PENDIENTE' : 'COMPLETO',
-          cantidad_confirmada: tipoOp === 'TRASLADO' ? null : cant,
-          merma:               0,
-        }])
-        .select().single();
-      if (detErr) throw detErr;
+      const detalle = await queryOne(`
+        INSERT INTO movimiento_detalle (idmovimiento, idmaterial, cantidad, idfundodestino, idoperacion, tipo, estado, cantidad_confirmada, merma)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `, [
+        idMovimiento,
+        idmaterial,
+        cant,
+        idfundodestino ?? null,
+        idoperacion,
+        tipo ?? null,
+        tipoOp === 'TRASLADO' ? 'PENDIENTE' : 'COMPLETO',
+        tipoOp === 'TRASLADO' ? null : cant,
+        0,
+      ]);
 
       creados.push(detalle);
     }

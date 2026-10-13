@@ -1,73 +1,30 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Bell, X, AlertTriangle, Package, MapPin, User, Calendar } from 'lucide-react';
-
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 export default function AlertasMerma() {
   const [alertas, setAlertas]     = useState<any[]>([]);
   const [open, setOpen]           = useState(false);
   const [loading, setLoading]     = useState(true);
-  const [nuevas, setNuevas]       = useState(0); // badge de "no vistas"
-  const channelRef                = useRef<ReturnType<typeof supabaseClient.channel> | null>(null);
+  const [nuevas, setNuevas]       = useState(0);
+  const prevCountRef              = useRef(0);
 
-  // Carga inicial
   const fetchAlertas = async () => {
     const res = await fetch('/api/movimiento_detalle?conMerma=1');
     const json = await res.json();
-    setAlertas(json.data ?? []);
+    const data = json.data ?? [];
+    const newCount = data.length - prevCountRef.current;
+    if (newCount > 0 && prevCountRef.current > 0) setNuevas((n) => n + newCount);
+    prevCountRef.current = data.length;
+    setAlertas(data);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchAlertas();
-
-    // Suscripción Realtime a movimiento_detalle
-    const channel = supabaseClient
-      .channel('merma-alerts')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'movimiento_detalle' },
-        (payload) => {
-          const row = payload.new as any;
-          if ((row.merma ?? 0) === 0) {
-            // Sin merma — quitar de la lista si estaba
-            setAlertas((prev) => prev.filter((a) => a.id !== row.id));
-            return;
-          }
-          // Con merma — traer detalle completo con joins y actualizar/agregar
-          fetch(`/api/movimiento_detalle?idmovimiento=${row.idmovimiento}&conMerma=1`)
-            .then((r) => r.json())
-            .then((res) => {
-              const nuevosDetalles: any[] = res.data ?? [];
-              setAlertas((prev) => {
-                const prevIds = new Set(prev.map((a) => a.id));
-                const agregados = nuevosDetalles.filter((d) => !prevIds.has(d.id));
-                if (agregados.length > 0) setNuevas((n) => n + agregados.length);
-                // Actualizar existentes y agregar nuevos
-                return [
-                  ...agregados,
-                  ...prev.map((a) => {
-                    const updated = nuevosDetalles.find((d) => d.id === a.id);
-                    return updated ?? a;
-                  }),
-                ];
-              });
-            });
-        }
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-
-    return () => {
-      channel.unsubscribe();
-    };
+    const id = setInterval(fetchAlertas, 15000);
+    return () => clearInterval(id);
   }, []);
 
   const handleOpen = () => {
@@ -85,7 +42,6 @@ export default function AlertasMerma() {
 
   return (
     <>
-      {/* Campana fija */}
       <button
         onClick={handleOpen}
         className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-white shadow-lg border border-gray-200 flex items-center justify-center hover:shadow-xl transition-all group"
@@ -101,13 +57,11 @@ export default function AlertasMerma() {
         )}
       </button>
 
-      {/* Modal */}
       {open && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
 
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
@@ -115,7 +69,7 @@ export default function AlertasMerma() {
                 </div>
                 <div>
                   <h2 className="font-semibold text-gray-800">Alertas de merma</h2>
-                  <p className="text-xs text-gray-400">{count} detalle{count !== 1 ? 's' : ''} con pérdida · tiempo real</p>
+                  <p className="text-xs text-gray-400">{count} detalle{count !== 1 ? 's' : ''} con pérdida · polling 15s</p>
                 </div>
               </div>
               <button onClick={() => setOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
@@ -123,7 +77,6 @@ export default function AlertasMerma() {
               </button>
             </div>
 
-            {/* Lista */}
             <div className="overflow-y-auto flex-1">
               {loading ? (
                 <div className="flex justify-center items-center py-16 text-sm text-gray-300">Cargando...</div>

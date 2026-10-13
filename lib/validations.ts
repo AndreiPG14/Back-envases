@@ -50,19 +50,19 @@ export function formatearErrores(errores: ValidationError[]) {
 }
 
 export async function verificarDuplicado(
-  supabase: any,
   tabla: string,
   campo: string,
   valor: string,
-  excludeId?: number
+  excludeId?: number,
+  excludeField: string = 'id'
 ): Promise<boolean> {
-  let query = supabase
-    .from(tabla)
-    .select('id')
-    .ilike(campo, valor.trim());
-
-  if (excludeId) query = query.neq('id', excludeId);
-
-  const { data } = await query;
-  return data && data.length > 0;
+  const { query } = await import('@/lib/db');
+  let sql = `SELECT 1 FROM ${tabla} WHERE LOWER(${campo}) = LOWER($1)`;
+  const params: any[] = [valor.trim()];
+  if (excludeId) {
+    sql += ` AND ${excludeField} != $2`;
+    params.push(excludeId);
+  }
+  const rows = await query(sql, params);
+  return rows.length > 0;
 }

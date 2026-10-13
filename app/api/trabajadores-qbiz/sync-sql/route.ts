@@ -1,24 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { NextResponse } from 'next/server';
+import { query } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
-
-interface QbizRow {
-  DNI: string;
-  NOMBRES: string;
-  'APELLIDO PATERNO': string;
-  'APELLIDO MATERNO': string;
-  EMPRESA: string;
-  ÁREA: string;
-  CARGO: string;
-  'TIPO TRABAJADOR': string;
-  RÉGIMEN: string;
-  CENTROCOSTO: string;
-  VIGENCIA: string;
-  'FECHA DE INGRESO': string;
-  'FECHA DE CESE': string;
-  'COD FUNCIONARIO': string;
-  'PLANILLA NISIRA': string;
-}
 
 const empresaIdMap: Record<string, number> = {
   'AQU_ANQA': 1,
@@ -30,123 +12,77 @@ const tipoTrabajadorIdMap: Record<string, number> = {
   'EMPLEADO': 2,
 };
 
-const parseDate = (val: any): string | null => {
-  if (!val) return null;
-  const str = val.toString().trim();
-  const [d, m, y] = str.split('/');
-  if (!d || !m || !y) return null;
-  const date = new Date(`${y}-${m}-${d}`);
-  return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
-};
-
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const body = await request.json();
-    const rows: QbizRow[] = body.rows || [];
+    const rows = await query(
+      `SELECT payload FROM public.qbiz_funcionarios_raw`
+    );
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'Se requiere un array de filas' } as ApiResponse<null>,
-        { status: 400 }
-      );
+    if (rows.length === 0) {
+      return NextResponse.json({ success: true, data: { insertados: 0, omitidos: 0 }, message: 'No hay datos en qbiz_funcionarios_raw' } as ApiResponse<any>);
     }
 
     let omitidos = 0;
     const parsed: any[] = [];
 
-    for (const row of rows) {
-      const dni = row['DNI']?.toString().trim();
-      if (!dni) {
-        omitidos++;
-        continue;
-      }
+    for (const { payload } of rows) {
+      const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+      const dni = p.DNI?.toString().trim();
+      if (!dni) { omitidos++; continue; }
 
       parsed.push({
         dni,
-        nombres: row['NOMBRES']?.toString().trim() || null,
-        apellido_paterno: row['APELLIDO PATERNO']?.toString().trim() || null,
-        apellido_materno: row['APELLIDO MATERNO']?.toString().trim() || null,
-        empresa_id: empresaIdMap[row['EMPRESA']?.toString().trim()] ?? null,
+        nombres: p.NOMBRES?.trim() || null,
+        apellido_paterno: p['APELLIDO PATERNO']?.trim() || null,
+        apellido_materno: p['APELLIDO MATERNO']?.trim() || null,
+        empresa_id: empresaIdMap[p.EMPRESA?.trim()] ?? null,
         supervisor: false,
         eliminado: false,
-        area: row['ÁREA']?.toString().trim() || null,
-        cargo: row['CARGO']?.toString().trim() || null,
-        tipo_trabajador: row['TIPO TRABAJADOR']?.toString().trim() || null,
-        tipo_trabajador_id: tipoTrabajadorIdMap[row['TIPO TRABAJADOR']?.toString().trim()] ?? null,
-        regimen: row['RÉGIMEN']?.toString().trim() || null,
-        centro_costo: row['CENTROCOSTO']?.toString().trim() || null,
-        vigencia: row['VIGENCIA']?.toString().trim() || null,
-        fecha_ingreso: parseDate(row['FECHA DE INGRESO']),
-        fecha_cese: parseDate(row['FECHA DE CESE']),
-        cod_funcionario: row['COD FUNCIONARIO']?.toString().trim() || null,
-        planilla_nisira: row['PLANILLA NISIRA']?.toString().trim() || null,
+        area: p['ÁREA']?.trim() || null,
+        cargo: p.CARGO?.trim() || null,
+        tipo_trabajador: p['TIPO TRABAJADOR']?.trim() || null,
+        tipo_trabajador_id: tipoTrabajadorIdMap[p['TIPO TRABAJADOR']?.trim()] ?? null,
+        regimen: p['RÉGIMEN']?.trim() || null,
+        centro_costo: p.CENTROCOSTO?.trim() || null,
+        vigencia: p.VIGENCIA?.trim() || null,
+        fecha_ingreso: p['FECHA DE INGRESO'] || null,
+        fecha_cese: p['FECHA DE CESE'] || null,
+        cod_funcionario: p['COD FUNCIONARIO']?.trim() || null,
+        planilla_nisira: p['PLANILLA NISIRA']?.trim() || null,
       });
     }
 
-    if (parsed.length === 0) {
-      return NextResponse.json(
-        {
-          success: true,
-          data: { insertados: 0, omitidos },
-        } as ApiResponse<any>
-      );
-    }
-
-    // Deduplicar por DNI
     const deduped = Object.values(
-      parsed.reduce((acc: any, r: any) => {
-        acc[r.dni] = r;
-        return acc;
-      }, {} as Record<string, any>)
-    );
+      parsed.reduce((acc: any, r: any) => { acc[r.dni] = r; return acc; }, {} as Record<string, any>)
+    ) as any[];
 
-    // Usar SQL directo para evitar cache de schema
     let insertados = 0;
-    for (const fila of deduped as any[]) {
+    for (const f of deduped) {
       try {
-        const { error } = await supabase.rpc('upsert_trabajador', {
-          p_dni: fila.dni,
-          p_nombres: fila.nombres,
-          p_apellido_paterno: fila.apellido_paterno,
-          p_apellido_materno: fila.apellido_materno,
-          p_empresa_id: fila.empresa_id,
-          p_supervisor: fila.supervisor,
-          p_eliminado: fila.eliminado,
-          p_area: fila.area,
-          p_cargo: fila.cargo,
-          p_tipo_trabajador: fila.tipo_trabajador,
-          p_tipo_trabajador_id: fila.tipo_trabajador_id,
-          p_regimen: fila.regimen,
-          p_centro_costo: fila.centro_costo,
-          p_vigencia: fila.vigencia,
-          p_fecha_ingreso: fila.fecha_ingreso,
-          p_fecha_cese: fila.fecha_cese,
-          p_cod_funcionario: fila.cod_funcionario,
-          p_planilla_nisira: fila.planilla_nisira,
-        });
-
-        if (!error) {
-          insertados++;
-        }
-      } catch (e) {
-        // Continuar con el siguiente
-      }
+        await query(
+          `INSERT INTO trabajadores (dni, nombres, apellido_paterno, apellido_materno, empresa_id, supervisor, eliminado, area, cargo, tipo_trabajador, tipo_trabajador_id, regimen, centro_costo, vigencia, fecha_ingreso, fecha_cese, cod_funcionario, planilla_nisira)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+           ON CONFLICT (dni) DO UPDATE SET
+             nombres = EXCLUDED.nombres, apellido_paterno = EXCLUDED.apellido_paterno, apellido_materno = EXCLUDED.apellido_materno,
+             empresa_id = EXCLUDED.empresa_id, area = EXCLUDED.area, cargo = EXCLUDED.cargo, tipo_trabajador = EXCLUDED.tipo_trabajador,
+             tipo_trabajador_id = EXCLUDED.tipo_trabajador_id, regimen = EXCLUDED.regimen, centro_costo = EXCLUDED.centro_costo,
+             vigencia = EXCLUDED.vigencia, fecha_ingreso = EXCLUDED.fecha_ingreso, fecha_cese = EXCLUDED.fecha_cese,
+             cod_funcionario = EXCLUDED.cod_funcionario, planilla_nisira = EXCLUDED.planilla_nisira`,
+          [f.dni, f.nombres, f.apellido_paterno, f.apellido_materno, f.empresa_id,
+           f.supervisor, f.eliminado, f.area, f.cargo, f.tipo_trabajador,
+           f.tipo_trabajador_id, f.regimen, f.centro_costo, f.vigencia,
+           f.fecha_ingreso, f.fecha_cese, f.cod_funcionario, f.planilla_nisira]
+        );
+        insertados++;
+      } catch { /* continuar */ }
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          insertados,
-          omitidos: omitidos + (parsed.length - deduped.length),
-        },
-        message: `Sincronización completada: ${insertados} insertados, ${omitidos + (parsed.length - deduped.length)} omitidos`,
-      } as ApiResponse<any>
-    );
+    return NextResponse.json({
+      success: true,
+      data: { insertados, omitidos: omitidos + (parsed.length - deduped.length) },
+      message: `Sincronización completada: ${insertados} insertados de ${rows.length} registros en qbiz_funcionarios_raw`,
+    } as ApiResponse<any>);
   } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message } as ApiResponse<null>,
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }
 }

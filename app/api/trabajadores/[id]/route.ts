@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { Trabajadores, ApiResponse } from '@/lib/types';
 
 export async function GET(
@@ -8,13 +8,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const data = await queryOne('SELECT * FROM trabajadores WHERE id = $1', [id]);
 
-    if (error) throw error;
     if (!data) {
       return NextResponse.json(
         { success: false, error: 'Trabajador no encontrado' } as ApiResponse<null>,
@@ -42,14 +37,14 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .update(body)
-      .eq('id', id)
-      .select()
-      .single();
+    const keys = Object.keys(body);
+    const values = Object.values(body);
+    const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
 
-    if (error) throw error;
+    const data = await queryOne(
+      `UPDATE trabajadores SET ${setClause} WHERE id = $${keys.length + 1} RETURNING *`,
+      [...values, id]
+    );
 
     return NextResponse.json({
       success: true,
@@ -70,12 +65,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { error } = await supabase
-      .from('trabajadores')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
+    await query('DELETE FROM trabajadores WHERE id = $1', [id]);
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
 export async function PATCH(
@@ -17,13 +17,9 @@ export async function PATCH(
       );
     }
 
-    const { data: detalle, error: fetchErr } = await supabase
-      .from('movimiento_detalle')
-      .select('*')
-      .eq('id', detalleId)
-      .single();
+    const detalle = await queryOne(`SELECT * FROM movimiento_detalle WHERE id = $1`, [detalleId]);
 
-    if (fetchErr || !detalle) {
+    if (!detalle) {
       return NextResponse.json(
         { success: false, error: 'Detalle no encontrado' },
         { status: 404 }
@@ -44,14 +40,9 @@ export async function PATCH(
       );
     }
 
-    const { data: updated, error: updErr } = await supabase
-      .from('movimiento_detalle')
-      .update({ idfundodestino: idfundodestino_nuevo })
-      .eq('id', detalleId)
-      .select()
-      .single();
-
-    if (updErr) throw updErr;
+    const updated = await queryOne(`
+      UPDATE movimiento_detalle SET idfundodestino = $1 WHERE id = $2 RETURNING *
+    `, [idfundodestino_nuevo, detalleId]);
 
     return NextResponse.json({
       success: true,

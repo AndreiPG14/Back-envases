@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
 export async function PUT(
@@ -14,17 +14,15 @@ export async function PUT(
 
     const ESTADOS = ['PENDIENTE', 'COMPLETO', 'INCOMPLETO'];
     if (estado && !ESTADOS.includes(estado)) {
-      return NextResponse.json({ success: false, error: 'Estado inválido' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Estado invalido' }, { status: 400 });
     }
 
-    // Obtener detalle actual para calcular merma
-    const { data: detalle, error: detErr } = await supabase
-      .from('movimiento_detalle')
-      .select('cantidad, idfundodestino, idmaterial, cantidad_confirmada')
-      .eq('id', id)
-      .single();
+    const detalle = await queryOne(
+      `SELECT cantidad, idfundodestino, idmaterial, cantidad_confirmada FROM movimiento_detalle WHERE id = $1`,
+      [id]
+    );
 
-    if (detErr || !detalle) {
+    if (!detalle) {
       return NextResponse.json({ success: false, error: 'Detalle no encontrado' }, { status: 404 });
     }
 
@@ -34,23 +32,19 @@ export async function PUT(
     if (observaciones !== undefined) updates.observaciones = observaciones;
 
     if (estado === 'PENDIENTE') {
-      // Revertir stock en destino: quitar lo que ya estaba confirmado
       if (detalle.idfundodestino && detalle.idmaterial) {
         const prevConf = Number(detalle.cantidad_confirmada ?? 0);
         if (prevConf > 0) {
-          const { data: sf } = await supabase
-            .from('stock_fundo')
-            .select('stock')
-            .eq('idmaterial', detalle.idmaterial)
-            .eq('idfundo', detalle.idfundodestino)
-            .single();
-
-          await supabase
-            .from('stock_fundo')
-            .upsert(
-              { idmaterial: detalle.idmaterial, idfundo: detalle.idfundodestino, stock: Math.max(0, (sf?.stock ?? 0) - prevConf) },
-              { onConflict: 'idmaterial,idfundo' }
-            );
+          const sf = await queryOne(
+            `SELECT stock FROM stock_fundo WHERE idmaterial = $1 AND idfundo = $2`,
+            [detalle.idmaterial, detalle.idfundodestino]
+          );
+          const newStock = Math.max(0, (sf?.stock ?? 0) - prevConf);
+          await query(`
+            INSERT INTO stock_fundo (idmaterial, idfundo, stock)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (idmaterial, idfundo) DO UPDATE SET stock = $3
+          `, [detalle.idmaterial, detalle.idfundodestino, newStock]);
         }
       }
       updates.cantidad_confirmada = null;
@@ -59,25 +53,20 @@ export async function PUT(
       updates.cantidad_confirmada = detalle.cantidad;
       updates.merma = 0;
 
-      // Ajustar stock en destino si había una confirmación previa menor
       if (detalle.idfundodestino && detalle.idmaterial) {
         const prevConf = Number(detalle.cantidad_confirmada ?? 0);
         const diff = Number(detalle.cantidad) - prevConf;
         if (diff !== 0) {
-          const { data: sf } = await supabase
-            .from('stock_fundo')
-            .select('stock')
-            .eq('idmaterial', detalle.idmaterial)
-            .eq('idfundo', detalle.idfundodestino)
-            .single();
-
-          const stockActual = (sf?.stock ?? 0) + diff;
-          await supabase
-            .from('stock_fundo')
-            .upsert(
-              { idmaterial: detalle.idmaterial, idfundo: detalle.idfundodestino, stock: Math.max(0, stockActual) },
-              { onConflict: 'idmaterial,idfundo' }
-            );
+          const sf = await queryOne(
+            `SELECT stock FROM stock_fundo WHERE idmaterial = $1 AND idfundo = $2`,
+            [detalle.idmaterial, detalle.idfundodestino]
+          );
+          const stockActual = Math.max(0, (sf?.stock ?? 0) + diff);
+          await query(`
+            INSERT INTO stock_fundo (idmaterial, idfundo, stock)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (idmaterial, idfundo) DO UPDATE SET stock = $3
+          `, [detalle.idmaterial, detalle.idfundodestino, stockActual]);
         }
       }
     } else if (estado === 'INCOMPLETO') {
@@ -91,43 +80,54 @@ export async function PUT(
       updates.cantidad_confirmada = cantConf;
       updates.merma = Number(detalle.cantidad) - cantConf;
 
-      // Ajustar stock en destino si ya había una confirmación previa
       if (detalle.idfundodestino && detalle.idmaterial) {
         const prevConf = Number(detalle.cantidad_confirmada ?? 0);
         const diff = cantConf - prevConf;
         if (diff !== 0) {
-          const { data: sf } = await supabase
-            .from('stock_fundo')
-            .select('stock')
-            .eq('idmaterial', detalle.idmaterial)
-            .eq('idfundo', detalle.idfundodestino)
-            .single();
-
-          const stockActual = (sf?.stock ?? 0) + diff;
-          await supabase
-            .from('stock_fundo')
-            .upsert(
-              { idmaterial: detalle.idmaterial, idfundo: detalle.idfundodestino, stock: Math.max(0, stockActual) },
-              { onConflict: 'idmaterial,idfundo' }
-            );
+          const sf = await queryOne(
+            `SELECT stock FROM stock_fundo WHERE idmaterial = $1 AND idfundo = $2`,
+            [detalle.idmaterial, detalle.idfundodestino]
+          );
+          const stockActual = Math.max(0, (sf?.stock ?? 0) + diff);
+          await query(`
+            INSERT INTO stock_fundo (idmaterial, idfundo, stock)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (idmaterial, idfundo) DO UPDATE SET stock = $3
+          `, [detalle.idmaterial, detalle.idfundodestino, stockActual]);
         }
       }
     }
 
-    const { data: updated, error } = await supabase
-      .from('movimiento_detalle')
-      .update(updates)
-      .eq('id', id)
-      .select(`
-        *,
-        material:idmaterial(id, descripcion, um),
-        fundo_destino:idfundodestino(id, descripcion),
-        operacion:idoperacion(id, descripcion)
-      `)
-      .single();
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    for (const [key, val] of Object.entries(updates)) {
+      setClauses.push(`${key} = $${idx++}`);
+      values.push(val);
+    }
+    values.push(id);
 
-    if (error) throw error;
-    return NextResponse.json({ success: true, data: updated, message: 'Detalle actualizado' } as ApiResponse<any>);
+    const updated = await queryOne(`
+      UPDATE movimiento_detalle SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *
+    `, values);
+
+    let data = updated;
+    if (updated) {
+      const enriched = await queryOne(`
+        SELECT md.*,
+          json_build_object('id', mat.id, 'descripcion', mat.descripcion, 'um', mat.um) AS material,
+          json_build_object('id', fd.id, 'descripcion', fd.descripcion) AS fundo_destino,
+          json_build_object('id', op.id, 'descripcion', op.descripcion) AS operacion
+        FROM movimiento_detalle md
+        LEFT JOIN materiales mat ON mat.id = md.idmaterial
+        LEFT JOIN fundo fd ON fd.id = md.idfundodestino
+        LEFT JOIN operacion op ON op.id = md.idoperacion
+        WHERE md.id = $1
+      `, [id]);
+      data = enriched;
+    }
+
+    return NextResponse.json({ success: true, data, message: 'Detalle actualizado' } as ApiResponse<any>);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message } as ApiResponse<null>, { status: 500 });
   }

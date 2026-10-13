@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 import { validarRequeridos, formatearErrores } from '@/lib/validations';
 import bcrypt from 'bcryptjs';
 
 export async function GET() {
   try {
-    const { data: usuarios, error } = await supabase.from('usuario').select('*').order('id');
-    if (error) throw error;
+    const usuarios = await query('SELECT * FROM usuario ORDER BY id');
 
     if (!usuarios || usuarios.length === 0) {
       return NextResponse.json({ success: true, data: [] } as ApiResponse<any[]>);
@@ -18,31 +17,21 @@ export async function GET() {
     const fundoIds = [...new Set(usuarios.map((u: any) => u.idfundo).filter(Boolean))];
     const grupoIds = [...new Set(usuarios.map((u: any) => u.idgrupo_vista).filter(Boolean))];
 
-    const [
-      { data: trabajadores, error: errTrab },
-      { data: roles,        error: errRoles },
-      { data: fundos,       error: errFundos },
-      { data: gruposVista,  error: errGrupos },
-    ] = await Promise.all([
-      supabase.from('trabajadores').select('dni, nombres, apellido_paterno, apellido_materno').in('dni', dnis),
-      supabase.from('roles').select('id, descripcion').in('id', rolIds),
+    const [trabajadores, roles, fundos, gruposVista] = await Promise.all([
+      query('SELECT dni, nombres, apellido_paterno, apellido_materno FROM trabajadores WHERE dni = ANY($1)', [dnis]),
+      query('SELECT id, descripcion FROM roles WHERE id = ANY($1)', [rolIds]),
       fundoIds.length > 0
-        ? supabase.from('fundo').select('id, descripcion').in('id', fundoIds)
-        : Promise.resolve({ data: [], error: null }),
+        ? query('SELECT id, descripcion FROM fundo WHERE id = ANY($1)', [fundoIds])
+        : Promise.resolve([]),
       grupoIds.length > 0
-        ? supabase.from('grupo_vista').select('id, descripcion, vistas').in('id', grupoIds)
-        : Promise.resolve({ data: [], error: null }),
+        ? query('SELECT id, descripcion, vistas FROM grupo_vista WHERE id = ANY($1)', [grupoIds])
+        : Promise.resolve([]),
     ]);
 
-    if (errTrab)   throw errTrab;
-    if (errRoles)  throw errRoles;
-    if (errFundos) throw errFundos;
-    if (errGrupos) throw errGrupos;
-
-    const rolesMap  = Object.fromEntries((roles  ?? []).map((r: any) => [String(r.id), r]));
-    const trabMap   = Object.fromEntries((trabajadores ?? []).map((t: any) => [String(t.dni), t]));
-    const fundosMap = Object.fromEntries((fundos ?? []).map((f: any) => [String(f.id), f]));
-    const gruposMap = Object.fromEntries((gruposVista ?? []).map((g: any) => [String(g.id), g]));
+    const rolesMap  = Object.fromEntries(roles.map((r: any) => [String(r.id), r]));
+    const trabMap   = Object.fromEntries(trabajadores.map((t: any) => [String(t.dni), t]));
+    const fundosMap = Object.fromEntries(fundos.map((f: any) => [String(f.id), f]));
+    const gruposMap = Object.fromEntries(gruposVista.map((g: any) => [String(g.id), g]));
 
     const enriched = usuarios.map((u: any) => ({
       ...u,
@@ -65,47 +54,38 @@ export async function POST(request: NextRequest) {
     const errores = validarRequeridos(body, ['trabajadorid', 'rolid', 'username', 'password']);
     if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
 
-    const { data: trabajador } = await supabase
-      .from('trabajadores').select('dni, nombres, apellido_paterno').eq('dni', body.trabajadorid).single();
+    const trabajador = await queryOne(
+      'SELECT dni, nombres, apellido_paterno FROM trabajadores WHERE dni = $1', [body.trabajadorid]
+    );
     if (!trabajador) return NextResponse.json({ success: false, error: 'El trabajador no existe' }, { status: 404 });
 
-    const { data: rol } = await supabase.from('roles').select('id, descripcion').eq('id', body.rolid).single();
+    const rol = await queryOne('SELECT id, descripcion FROM roles WHERE id = $1', [body.rolid]);
     if (!rol) return NextResponse.json({ success: false, error: 'El rol no existe' }, { status: 404 });
 
-    const { data: dupUser } = await supabase.from('usuario').select('id').eq('username', body.username).single();
+    const dupUser = await queryOne('SELECT id FROM usuario WHERE username = $1', [body.username]);
     if (dupUser) return NextResponse.json({ success: false, error: 'Ese nombre de usuario ya existe' }, { status: 409 });
 
-    const { data: dup } = await supabase
-      .from('usuario').select('id').eq('trabajadorid', body.trabajadorid).eq('rolid', body.rolid).single();
+    const dup = await queryOne(
+      'SELECT id FROM usuario WHERE trabajadorid = $1 AND rolid = $2', [body.trabajadorid, body.rolid]
+    );
     if (dup) return NextResponse.json({ success: false, error: 'Este trabajador ya tiene ese rol asignado' }, { status: 409 });
 
     const hashedPassword = await bcrypt.hash(body.password, 10);
 
-    const { data, error } = await supabase
-      .from('usuario')
-      .insert([{
-        idfundo:       body.idfundo ?? null,
-        idgrupo_vista: body.idgrupo_vista ?? null,
-        trabajadorid:  body.trabajadorid,
-        rolid:         body.rolid,
-        username:      body.username,
-        password:      hashedPassword,
-      }])
-      .select('*')
-      .single();
-
-    if (error) throw error;
+    const data = await queryOne(
+      `INSERT INTO usuario (idfundo, idgrupo_vista, trabajadorid, rolid, username, password)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [body.idfundo ?? null, body.idgrupo_vista ?? null, body.trabajadorid, body.rolid, body.username, hashedPassword]
+    );
 
     let fundo = null;
     if (body.idfundo) {
-      const { data: f } = await supabase.from('fundo').select('id, descripcion').eq('id', body.idfundo).single();
-      fundo = f;
+      fundo = await queryOne('SELECT id, descripcion FROM fundo WHERE id = $1', [body.idfundo]);
     }
 
     let grupo_vista = null;
     if (body.idgrupo_vista) {
-      const { data: g } = await supabase.from('grupo_vista').select('id, descripcion, vistas').eq('id', body.idgrupo_vista).single();
-      grupo_vista = g;
+      grupo_vista = await queryOne('SELECT id, descripcion, vistas FROM grupo_vista WHERE id = $1', [body.idgrupo_vista]);
     }
 
     return NextResponse.json({

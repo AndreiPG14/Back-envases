@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 import { validarRequeridos, validarMaxLength, formatearErrores, verificarDuplicado } from '@/lib/validations';
 
@@ -14,18 +14,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     ];
     if (errores.length > 0) return NextResponse.json(formatearErrores(errores), { status: 400 });
 
-    if (await verificarDuplicado(supabase, 'operacion', 'descripcion', body.descripcion, Number(id))) {
+    if (await verificarDuplicado('operacion', 'descripcion', body.descripcion, Number(id))) {
       return NextResponse.json({ success: false, error: 'Ya existe una operación con esa descripción' }, { status: 409 });
     }
 
-    const { data, error } = await supabase
-      .from('operacion')
-      .update({ descripcion: body.descripcion })
-      .eq('id', id)
-      .select()
-      .single();
+    const data = await queryOne(
+      'UPDATE operacion SET descripcion = $1 WHERE id = $2 RETURNING *',
+      [body.descripcion, id]
+    );
 
-    if (error) throw error;
     return NextResponse.json({ success: true, data, message: 'Operación actualizada' } as ApiResponse<any>);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
@@ -35,8 +32,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const { error } = await supabase.from('operacion').delete().eq('id', id);
-    if (error) throw error;
+    await query('DELETE FROM operacion WHERE id = $1', [id]);
     return NextResponse.json({ success: true, message: 'Operación eliminada' });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

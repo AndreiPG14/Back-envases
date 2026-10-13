@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { queryOne } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -17,21 +17,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Buscar usuario por username
-    const { data: user, error } = await supabase
-      .from('usuario')
-      .select('*')
-      .eq('username', usuario)
-      .single();
+    const user = await queryOne('SELECT * FROM usuario WHERE username = $1', [usuario]);
 
-    if (error || !user) {
+    if (!user) {
       return NextResponse.json(
         { success: false, error: 'Usuario o contraseña incorrectos' },
         { status: 401 }
       );
     }
 
-    // Verificar contraseña
     const passwordOk = await bcrypt.compare(password, user.password ?? '');
     if (!passwordOk) {
       return NextResponse.json(
@@ -40,28 +34,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Traer trabajador y rol
-    const [{ data: trabajador }, { data: rol }] = await Promise.all([
-      supabase
-        .from('trabajadores')
-        .select('dni, nombres, apellido_paterno, apellido_materno')
-        .eq('dni', user.trabajadorid)
-        .single(),
-      supabase
-        .from('roles')
-        .select('id, descripcion')
-        .eq('id', user.rolid)
-        .single(),
+    const [trabajador, rol] = await Promise.all([
+      queryOne(
+        'SELECT dni, nombres, apellido_paterno, apellido_materno FROM trabajadores WHERE dni = $1',
+        [user.trabajadorid]
+      ),
+      queryOne('SELECT id, descripcion FROM roles WHERE id = $1', [user.rolid]),
     ]);
 
-    // Generar token JWT (expira en 30 días)
     const token = jwt.sign(
       { id: user.id, username: user.username, rolid: user.rolid },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
-    // Mapear al formato que espera Flutter
     const userResponse = {
       id: user.id,
       username: user.username ?? '',
@@ -86,7 +72,6 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ token, user: userResponse });
 
-    // Cookie HTTP-only para sesión web (30 días)
     response.cookies.set('web_token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

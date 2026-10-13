@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase';
-
-const BUCKET = 'registro_mov_materiales';
+import { query, queryOne } from '@/lib/db';
+import { uploadImage } from '@/lib/cloudinary';
 
 export async function POST(
   request: NextRequest,
@@ -11,19 +10,10 @@ export async function POST(
     const { id } = await params;
     const movId = parseInt(id);
     if (isNaN(movId)) {
-      return NextResponse.json({ success: false, error: 'ID inválido' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'ID invalido' }, { status: 400 });
     }
 
-    const admin = getSupabaseAdmin();
-
-    // Verificar que el movimiento existe (admin para saltear RLS)
-    const { data: mov, error: movErr } = await admin
-      .from('movimiento')
-      .select('id')
-      .eq('id', movId)
-      .maybeSingle();
-
-    if (movErr) throw movErr;
+    const mov = await queryOne(`SELECT id FROM movimiento WHERE id = $1`, [movId]);
     if (!mov) {
       return NextResponse.json({ success: false, error: 'Movimiento no encontrado' }, { status: 404 });
     }
@@ -32,57 +22,19 @@ export async function POST(
     try {
       formData = await request.formData();
     } catch (e: any) {
-      console.error('[foto] Error parseando formData:', e.message);
       return NextResponse.json({ success: false, error: `Error parseando formData: ${e.message}` }, { status: 400 });
     }
 
     const file = formData.get('foto') as File | null;
-    console.log('[foto] fields recibidos:', [...formData.keys()]);
-    console.log('[foto] file:', file ? `name=${file.name} type=${file.type} size=${file.size}` : 'null');
-
     if (!file) {
-      return NextResponse.json({ success: false, error: 'No se recibió ninguna imagen (campo "foto" vacío)' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'No se recibio ninguna imagen (campo "foto" vacio)' }, { status: 400 });
     }
-
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
-    const path = `mov_${movId}_${Date.now()}.${ext}`;
 
     const arrayBuffer = await file.arrayBuffer();
-    console.log('[foto] Subiendo a bucket:', BUCKET, 'path:', path, 'size:', arrayBuffer.byteLength);
+    const buffer = Buffer.from(arrayBuffer);
+    const publicUrl = await uploadImage(buffer, 'registro_mov_materiales', `mov_${movId}_${Date.now()}`);
 
-    // Fetch directo al REST API de Supabase Storage — el cliente JS llama btoa() internamente
-    const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-    const uploadRes = await fetch(
-      `${supabaseUrl}/storage/v1/object/${BUCKET}/${path}`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': file.type || 'image/jpeg',
-          'x-upsert': 'true',
-        },
-        body: arrayBuffer,
-      }
-    );
-
-    if (!uploadRes.ok) {
-      const errBody = await uploadRes.text();
-      console.error('[foto] uploadErr:', uploadRes.status, errBody);
-      throw new Error(`Upload falló (${uploadRes.status}): ${errBody}`);
-    }
-    console.log('[foto] Upload exitoso → path:', path);
-
-    const { data: urlData } = admin.storage.from(BUCKET).getPublicUrl(path);
-    const publicUrl = urlData.publicUrl;
-
-    const { error: updateErr } = await admin
-      .from('movimiento')
-      .update({ foto_url: publicUrl })
-      .eq('id', movId);
-
-    if (updateErr) throw updateErr;
+    await query(`UPDATE movimiento SET foto_url = $1 WHERE id = $2`, [publicUrl, movId]);
 
     return NextResponse.json({ success: true, data: { foto_url: publicUrl } }, { status: 200 });
   } catch (error: any) {

@@ -1,30 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { Movimiento, ApiResponse } from '@/lib/types';
 
-// GET: Obtener movimiento por ID con trazabilidad
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const { data, error } = await supabase
-      .from('movimiento')
-      .select(`
-        *,
-        usuario_origen:idusuarioorigen(id, grupo, trabajadores(nombres, dni)),
-        usuario_destino:idusuariodestino(id, grupo, trabajadores(nombres, dni)),
-        material:idmaterial(id, descripcion, stock),
-        vehiculo:idvehiculo(id, placa, marca),
-        fundo_origen:idfundoorigen(id, descripcion),
-        fundo_destino:idfundodestino(id, descripcion),
-        operacion:idoperacion(id, descripcion)
-      `)
-      .eq('id', id)
-      .single();
+    const data = await queryOne(`
+      SELECT m.*,
+        json_build_object('id', uo.id, 'grupo', uo.grupo, 'trabajadores', (SELECT json_build_object('nombres', t.nombres, 'dni', t.dni) FROM trabajadores t WHERE t.id = uo.id)) AS usuario_origen,
+        json_build_object('id', ud.id, 'grupo', ud.grupo, 'trabajadores', (SELECT json_build_object('nombres', t.nombres, 'dni', t.dni) FROM trabajadores t WHERE t.id = ud.id)) AS usuario_destino,
+        json_build_object('id', mat.id, 'descripcion', mat.descripcion, 'stock', mat.stock) AS material,
+        json_build_object('id', v.id, 'placa', v.placa, 'marca', v.marca) AS vehiculo,
+        json_build_object('id', fo.id, 'descripcion', fo.descripcion) AS fundo_origen,
+        json_build_object('id', fd.id, 'descripcion', fd.descripcion) AS fundo_destino,
+        json_build_object('id', op.id, 'descripcion', op.descripcion) AS operacion
+      FROM movimiento m
+      LEFT JOIN usuario uo ON uo.id = m.idusuarioorigen
+      LEFT JOIN usuario ud ON ud.id = m.idusuariodestino
+      LEFT JOIN materiales mat ON mat.id = m.idmaterial
+      LEFT JOIN vehiculo v ON v.id = m.idvehiculo
+      LEFT JOIN fundo fo ON fo.id = m.idfundoorigen
+      LEFT JOIN fundo fd ON fd.id = m.idfundodestino
+      LEFT JOIN operacion op ON op.id = m.idoperacion
+      WHERE m.id = $1
+    `, [id]);
 
-    if (error) throw error;
     if (!data) {
       return NextResponse.json(
         { success: false, error: 'Movimiento no encontrado' } as ApiResponse<null>,
@@ -40,7 +43,6 @@ export async function GET(
   }
 }
 
-// PUT: Actualizar movimiento (solo campos no críticos)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -62,14 +64,21 @@ export async function PUT(
       allowedFields.estado = body.estado;
     }
 
-    const { data, error } = await supabase
-      .from('movimiento')
-      .update(allowedFields)
-      .eq('id', id)
-      .select()
-      .single();
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    for (const [key, val] of Object.entries(allowedFields)) {
+      if (val !== undefined) {
+        setClauses.push(`${key} = $${idx++}`);
+        values.push(val);
+      }
+    }
+    values.push(id);
 
-    if (error) throw error;
+    const data = await queryOne(`
+      UPDATE movimiento SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *
+    `, values);
+
     return NextResponse.json({
       success: true,
       data,
@@ -83,7 +92,6 @@ export async function PUT(
   }
 }
 
-// DELETE: Solo si no tiene detalles (cabecera incompleta/borrador)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -91,21 +99,19 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    // Verificar que no tenga detalles
-    const { count } = await supabase
-      .from('movimiento_detalle')
-      .select('id', { count: 'exact', head: true })
-      .eq('idmovimiento', id);
+    const countResult = await queryOne<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM movimiento_detalle WHERE idmovimiento = $1`,
+      [id]
+    );
 
-    if ((count ?? 0) > 0) {
+    if (parseInt(countResult?.count ?? '0') > 0) {
       return NextResponse.json(
         { success: false, error: 'No se puede eliminar: el movimiento ya tiene detalles registrados' },
         { status: 409 }
       );
     }
 
-    const { error } = await supabase.from('movimiento').delete().eq('id', id);
-    if (error) throw error;
+    await query(`DELETE FROM movimiento WHERE id = $1`, [id]);
 
     return NextResponse.json({ success: true, message: 'Cabecera eliminada' });
   } catch (error: any) {

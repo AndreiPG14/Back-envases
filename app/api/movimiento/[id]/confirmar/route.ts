@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,20 +15,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: 'La cantidad confirmada no puede ser negativa' }, { status: 400 });
     }
 
-    // Obtener el movimiento
-    const { data: mov, error: movErr } = await supabase
-      .from('movimiento')
-      .select('*, operacion:idoperacion(descripcion)')
-      .eq('id', id)
-      .single();
+    const mov = await queryOne(`
+      SELECT m.*, op.descripcion AS operacion_descripcion
+      FROM movimiento m
+      LEFT JOIN operacion op ON op.id = m.idoperacion
+      WHERE m.id = $1
+    `, [id]);
 
-    if (movErr || !mov) {
+    if (!mov) {
       return NextResponse.json({ success: false, error: 'Movimiento no encontrado' }, { status: 404 });
     }
     if (mov.estado !== 'PENDIENTE') {
       return NextResponse.json({ success: false, error: 'Este movimiento ya fue confirmado' }, { status: 409 });
     }
-    if (mov.operacion?.descripcion?.toUpperCase() !== 'TRASLADO') {
+    if (mov.operacion_descripcion?.toUpperCase() !== 'TRASLADO') {
       return NextResponse.json({ success: false, error: 'Solo se pueden confirmar traslados' }, { status: 400 });
     }
     if (Number(cantidad_confirmada) > Number(mov.cantidad)) {
@@ -42,40 +42,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const merma = Number(mov.cantidad) - cantConfirmada;
     const estado = merma === 0 ? 'COMPLETO' : 'INCOMPLETO';
 
-    // Aumentar stock en destino solo por la cantidad confirmada
     if (cantConfirmada > 0) {
-      const { data: sfDestino } = await supabase
-        .from('stock_fundo')
-        .select('stock')
-        .eq('idmaterial', mov.idmaterial)
-        .eq('idfundo', mov.idfundodestino)
-        .single();
-
-      const stockDestino = sfDestino?.stock ?? 0;
-
-      const { error: incErr } = await supabase
-        .from('stock_fundo')
-        .upsert(
-          { idmaterial: mov.idmaterial, idfundo: mov.idfundodestino, stock: stockDestino + cantConfirmada },
-          { onConflict: 'idmaterial,idfundo' }
-        );
-      if (incErr) throw incErr;
+      await query(`
+        INSERT INTO stock_fundo (idmaterial, idfundo, stock)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (idmaterial, idfundo) DO UPDATE SET stock = stock_fundo.stock + $3
+      `, [mov.idmaterial, mov.idfundodestino, cantConfirmada]);
     }
 
-    // Actualizar el movimiento
-    const { data: updated, error: updErr } = await supabase
-      .from('movimiento')
-      .update({
-        estado,
-        cantidad_confirmada: cantConfirmada,
-        merma,
-        ...(idusuario_destino ? { idusuariodestino: idusuario_destino } : {}),
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    const setClauses = [
+      'estado = $1',
+      'cantidad_confirmada = $2',
+      'merma = $3',
+    ];
+    const values: any[] = [estado, cantConfirmada, merma];
+    let idx = 4;
+    if (idusuario_destino) {
+      setClauses.push(`idusuariodestino = $${idx++}`);
+      values.push(idusuario_destino);
+    }
+    values.push(id);
 
-    if (updErr) throw updErr;
+    const updated = await queryOne(`
+      UPDATE movimiento SET ${setClauses.join(', ')} WHERE id = $${idx} RETURNING *
+    `, values);
 
     return NextResponse.json({
       success: true,
@@ -85,7 +75,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         : 'Traslado confirmado correctamente',
     } as ApiResponse<any>);
   } catch (error: any) {
-    console.error('❌ POST confirmar error:', error.message);
+    console.error('POST confirmar error:', error.message);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

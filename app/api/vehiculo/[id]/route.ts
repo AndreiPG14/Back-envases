@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { Vehiculo, ApiResponse } from '@/lib/types';
 
 export async function GET(
@@ -8,13 +8,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { data, error } = await supabase
-      .from('vehiculo')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const data = await queryOne('SELECT * FROM vehiculo WHERE id = $1', [id]);
 
-    if (error) throw error;
     if (!data) {
       return NextResponse.json(
         { success: false, error: 'Vehículo no encontrado' } as ApiResponse<null>,
@@ -38,14 +33,11 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    const { data, error } = await supabase
-      .from('vehiculo')
-      .update(body)
-      .eq('id', id)
-      .select()
-      .single();
+    const data = await queryOne(
+      'UPDATE vehiculo SET placa = $1, marca = $2 WHERE id = $3 RETURNING *',
+      [body.placa, body.marca, id]
+    );
 
-    if (error) throw error;
     return NextResponse.json({
       success: true,
       data,
@@ -65,12 +57,8 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const { error } = await supabase
-      .from('vehiculo')
-      .delete()
-      .eq('id', id);
+    await query('DELETE FROM vehiculo WHERE id = $1', [id]);
 
-    if (error) throw error;
     return NextResponse.json({
       success: true,
       message: 'Vehículo eliminado exitosamente',

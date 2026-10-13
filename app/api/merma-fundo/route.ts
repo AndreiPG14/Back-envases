@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
 export interface MermaFundoItem {
@@ -9,22 +9,16 @@ export interface MermaFundoItem {
   observaciones: string[];
 }
 
-// GET /api/merma-fundo — merma total por material y fundo destino
 export async function GET() {
   try {
-    // Solo merma ROTO afecta el stock; INCOMPLETO no se cuenta
-    const { data, error } = await supabase
-      .from('movimiento_detalle')
-      .select('idmaterial, idfundodestino, merma, observaciones, tipo_merma')
-      .not('idfundodestino', 'is', null)
-      .gt('merma', 0)
-      .eq('tipo_merma', 'ROTO');
+    const data = await query(`
+      SELECT idmaterial, idfundodestino, merma, observaciones
+      FROM movimiento_detalle
+      WHERE idfundodestino IS NOT NULL AND merma > 0 AND tipo_merma = 'ROTO'
+    `);
 
-    if (error) throw error;
-
-    // Agrupar por idmaterial + idfundodestino
     const map = new Map<string, MermaFundoItem>();
-    for (const row of data ?? []) {
+    for (const row of data) {
       const key = `${row.idmaterial}_${row.idfundodestino}`;
       if (!map.has(key)) {
         map.set(key, { idmaterial: row.idmaterial, idfundo: row.idfundodestino, total_merma: 0, observaciones: [] });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { queryOne } from '@/lib/db';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
@@ -13,18 +13,10 @@ export async function GET(request: NextRequest) {
 
     let vistas: string[] | null = null;
 
-    const { data: usuario } = await supabase
-      .from('usuario')
-      .select('idgrupo_vista')
-      .eq('id', payload.id)
-      .single();
+    const usuario = await queryOne('SELECT idgrupo_vista FROM usuario WHERE id = $1', [payload.id]);
 
     if (usuario?.idgrupo_vista) {
-      const { data: grupo } = await supabase
-        .from('grupo_vista')
-        .select('vistas')
-        .eq('id', usuario.idgrupo_vista)
-        .single();
+      const grupo = await queryOne('SELECT vistas FROM grupo_vista WHERE id = $1', [usuario.idgrupo_vista]);
       if (grupo) vistas = grupo.vistas;
     }
 

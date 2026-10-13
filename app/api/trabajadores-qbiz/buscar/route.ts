@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query } from '@/lib/db';
 import { Trabajadores, ApiResponse } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -15,14 +15,10 @@ export async function GET(request: NextRequest) {
 
     const searchTerm = `%${q.toUpperCase()}%`;
 
-    const { data, error } = await supabase
-      .from('trabajadores')
-      .select('*')
-      .or(`dni.ilike.${searchTerm},apellido_paterno.ilike.${searchTerm},nombres.ilike.${searchTerm}`)
-      .order('apellido_paterno', { ascending: true })
-      .limit(50);
-
-    if (error) throw error;
+    const data = await query(
+      'SELECT * FROM trabajadores WHERE dni ILIKE $1 OR apellido_paterno ILIKE $1 OR nombres ILIKE $1 ORDER BY apellido_paterno ASC LIMIT 50',
+      [searchTerm]
+    );
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { query, queryOne } from '@/lib/db';
 import { ApiResponse } from '@/lib/types';
 
 export async function GET(
@@ -8,13 +8,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const { data, error } = await supabase
-      .from('grupo_vista')
-      .select('*')
-      .eq('id', id)
-      .single();
+    const data = await queryOne('SELECT * FROM grupo_vista WHERE id = $1', [id]);
 
-    if (error) throw error;
     if (!data) return NextResponse.json({ success: false, error: 'Grupo no encontrado' } as ApiResponse<null>, { status: 404 });
 
     return NextResponse.json({ success: true, data } as ApiResponse<any>);
@@ -38,14 +33,10 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'Debe seleccionar al menos una vista' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
-      .from('grupo_vista')
-      .update({ descripcion: body.descripcion.trim(), vistas: body.vistas })
-      .eq('id', id)
-      .select('*')
-      .single();
-
-    if (error) throw error;
+    const data = await queryOne(
+      'UPDATE grupo_vista SET descripcion = $1, vistas = $2 WHERE id = $3 RETURNING *',
+      [body.descripcion.trim(), JSON.stringify(body.vistas), id]
+    );
 
     return NextResponse.json({ success: true, data, message: 'Grupo actualizado' } as ApiResponse<any>);
   } catch (error: any) {
@@ -60,20 +51,19 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const { count } = await supabase
-      .from('usuario')
-      .select('id', { count: 'exact', head: true })
-      .eq('idgrupo_vista', id);
+    const result = await queryOne(
+      'SELECT COUNT(*)::int AS count FROM usuario WHERE idgrupo_vista = $1',
+      [id]
+    );
 
-    if (count && count > 0) {
+    if (result && result.count > 0) {
       return NextResponse.json({
         success: false,
-        error: `No se puede eliminar: ${count} usuario(s) usan este grupo.`,
+        error: `No se puede eliminar: ${result.count} usuario(s) usan este grupo.`,
       } as ApiResponse<null>, { status: 409 });
     }
 
-    const { error } = await supabase.from('grupo_vista').delete().eq('id', id);
-    if (error) throw error;
+    await query('DELETE FROM grupo_vista WHERE id = $1', [id]);
 
     return NextResponse.json({ success: true, message: 'Grupo eliminado' } as ApiResponse<null>);
   } catch (error: any) {
