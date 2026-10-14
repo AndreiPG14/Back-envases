@@ -36,7 +36,7 @@ export async function POST(
           return NextResponse.json({ success: false, error: 'Origen y destino no pueden ser iguales' }, { status: 400 });
       }
 
-      const mat = await queryOne(`SELECT descripcion FROM material WHERE id = $1`, [idmaterial]);
+      const mat = await queryOne(`SELECT descripcion FROM materiales WHERE id = $1`, [idmaterial]);
       const matNombre = mat?.descripcion ?? `#${idmaterial}`;
       const sf = await queryOne(`SELECT stock FROM stock_fundo WHERE idmaterial = $1 AND idfundo = $2`, [idmaterial, idfundoorigen]);
       const stock = sf?.stock ?? 0;
